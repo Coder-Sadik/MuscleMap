@@ -82,7 +82,7 @@ export default async function LoginPage({
             <Button 
               formAction={login} 
               type="submit" 
-              className="w-full h-12 mt-8 rounded-xl bg-white text-black font-bold hover:bg-zinc-200 transition-all group shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_-5px_rgba(255,255,255,0.5)]"
+              className="w-full h-12 rounded-xl bg-white text-black font-bold hover:bg-zinc-200 transition-all group shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_-5px_rgba(255,255,255,0.5)]"
             >
               Sign In
               <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
