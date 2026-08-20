@@ -54,7 +54,7 @@ export default async function SignupPage({
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button formAction={signup} className="w-full">
+            <Button formAction={signup} type="submit" className="w-full">
               Sign Up
             </Button>
             <div className="text-sm text-center text-muted-foreground">

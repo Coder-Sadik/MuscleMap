@@ -44,7 +44,7 @@ export default async function ForgotPasswordPage({
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button formAction={forgotPassword} className="w-full">
+            <Button formAction={forgotPassword} type="submit" className="w-full">
               Send Reset Link
             </Button>
             <div className="text-sm text-center text-muted-foreground">

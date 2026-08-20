@@ -59,7 +59,7 @@ export default async function LoginPage({
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button formAction={login} className="w-full">
+            <Button formAction={login} type="submit" className="w-full">
               Sign In
             </Button>
             <div className="text-sm text-center text-muted-foreground">

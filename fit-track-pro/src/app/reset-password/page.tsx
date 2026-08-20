@@ -42,7 +42,7 @@ export default async function ResetPasswordPage({
             </div>
           </CardContent>
           <CardFooter>
-            <Button formAction={resetPassword} className="w-full">
+            <Button formAction={resetPassword} type="submit" className="w-full">
               Update Password
             </Button>
           </CardFooter>
