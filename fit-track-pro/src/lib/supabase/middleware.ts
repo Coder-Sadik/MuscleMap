@@ -54,7 +54,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // If user is logged in and tries to access login/signup, redirect to home
-  if (user && isPublicRoute && request.nextUrl.pathname !== '/auth/callback') {
+  if (user && isPublicRoute && request.nextUrl.pathname !== '/auth/callback' && request.nextUrl.pathname !== '/reset-password') {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)
