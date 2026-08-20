@@ -1,6 +1,7 @@
 import { signout } from '@/app/login/actions'
 import { Button } from '@/components/ui/button'
 import { LogOut } from 'lucide-react'
+import { DataManagement } from './DataManagement'
 
 export default function ProfilePage() {
   return (
@@ -10,15 +11,17 @@ export default function ProfilePage() {
         <p className="text-muted-foreground">Manage your settings.</p>
       </header>
       
-      <div className="flex-1 flex flex-col items-center justify-center space-y-6 border-2 border-dashed border-border/50 rounded-2xl bg-muted/20 p-6">
-        <p className="text-muted-foreground text-sm">User settings here</p>
-        
-        <form action={signout}>
-          <Button variant="destructive" type="submit" className="gap-2">
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </Button>
-        </form>
+      <div className="flex-1 flex flex-col space-y-6">
+        <DataManagement />
+
+        <div className="flex flex-col items-center justify-center p-6 border border-white/5 rounded-3xl bg-zinc-900/30">
+          <form action={signout}>
+            <Button variant="destructive" type="submit" className="gap-2 h-12 px-8 rounded-xl font-bold">
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );

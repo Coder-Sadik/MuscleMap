@@ -21,3 +21,8 @@ ALTER TABLE exercises DROP COLUMN IF EXISTS muscle_id;
 CREATE INDEX IF NOT EXISTS idx_exercises_primary_muscle ON exercises(primary_muscle);
 CREATE INDEX IF NOT EXISTS idx_exercises_equipment ON exercises(equipment);
 CREATE INDEX IF NOT EXISTS idx_exercises_difficulty ON exercises(difficulty);
+
+-- ==========================================
+-- UPDATE ROUTINE EXERCISES TABLE SCHEMA
+-- ==========================================
+ALTER TABLE routine_exercises ADD COLUMN IF NOT EXISTS target_weight_kg NUMERIC(6,2);

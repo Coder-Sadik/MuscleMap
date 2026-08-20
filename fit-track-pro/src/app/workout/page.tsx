@@ -1,9 +1,102 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Plus, ClipboardList } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, ClipboardList, Play, Dumbbell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { createClient } from '@/lib/supabase/client'
+
+type Routine = {
+  id: string
+  name: string
+  routine_exercises: {
+    exercise_id: string
+    target_sets: number
+    target_reps: number
+    target_weight_kg: number
+    exercises: {
+      name: string
+      primary_muscle: string
+    }
+  }[]
+}
+
+const LOCAL_STORAGE_KEY = 'muscles_map_active_workout'
 
 export default function WorkoutHub() {
+  const supabase = createClient()
+  const router = useRouter()
+  const [routines, setRoutines] = useState<Routine[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    fetchRoutines()
+  }, [])
+
+  const fetchRoutines = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setIsLoading(false)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('workout_routines')
+      .select(`
+        id,
+        name,
+        routine_exercises (
+          exercise_id,
+          target_sets,
+          target_reps,
+          target_weight_kg,
+          exercises (
+            name,
+            primary_muscle
+          )
+        )
+      `)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (data) {
+      setRoutines(data as unknown as Routine[])
+    } else {
+      console.error(error)
+    }
+    setIsLoading(false)
+  }
+
+  const handleStartRoutine = (routine: Routine) => {
+    // Map routine_exercises to the format expected by ActiveWorkout
+    const exercises = routine.routine_exercises.map(re => {
+      // Create empty sets based on target_sets
+      const sets = Array.from({ length: re.target_sets || 3 }).map(() => ({
+        id: window.crypto.randomUUID(),
+        weight: re.target_weight_kg ? re.target_weight_kg.toString() : '',
+        reps: re.target_reps ? re.target_reps.toString() : '',
+        completed: false
+      }))
+
+      return {
+        exercise_id: re.exercise_id,
+        name: re.exercises.name,
+        sets
+      }
+    })
+
+    // Save to local storage
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+      startTime: Date.now(),
+      exercises
+    }))
+
+    // Navigate to active workout
+    router.push('/workout/active')
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-black p-6 pt-12 pb-24 overflow-x-hidden selection:bg-emerald-500/30">
       <header className="space-y-1 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -14,7 +107,7 @@ export default function WorkoutHub() {
       {/* Quick Start */}
       <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100 fill-mode-both">
         <h2 className="text-sm font-semibold tracking-wider text-zinc-500 uppercase mb-4">Quick Start</h2>
-        <Link href="/workout/active" className="block">
+        <Link href="/workout/active" onClick={() => localStorage.removeItem(LOCAL_STORAGE_KEY)} className="block">
           <Button className="w-full h-20 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-lg shadow-[0_0_30px_-10px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.6)] transition-all group">
             <Plus className="w-7 h-7 mr-2 group-hover:scale-110 transition-transform" />
             Start Empty Workout
@@ -22,21 +115,64 @@ export default function WorkoutHub() {
         </Link>
       </section>
 
-      {/* Routines Placeholder (To be implemented later if user wants saved routines) */}
+      {/* My Routines */}
       <section className="mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200 fill-mode-both">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold tracking-wider text-zinc-500 uppercase">My Routines</h2>
-          <Button variant="ghost" size="sm" className="text-emerald-500 hover:text-emerald-400 h-8 px-2 text-xs">
-            <Plus className="w-4 h-4 mr-1" /> New Routine
-          </Button>
+          <Link href="/workout/builder" passHref>
+            <Button variant="ghost" size="sm" className="text-emerald-500 hover:text-emerald-400 h-8 px-2 text-xs">
+              <Plus className="w-4 h-4 mr-1" /> New Routine
+            </Button>
+          </Link>
         </div>
         
         <div className="space-y-3">
-          <Card className="bg-zinc-950/50 backdrop-blur-md border-white/5 border-dashed flex flex-col items-center justify-center p-8 text-center">
-            <ClipboardList className="w-8 h-8 text-zinc-600 mb-3" />
-            <p className="text-sm text-zinc-400 font-medium">No routines yet</p>
-            <p className="text-xs text-zinc-600 mt-1">Create a routine to save time.</p>
-          </Card>
+          {isLoading ? (
+            <div className="text-center p-8 text-zinc-500">Loading routines...</div>
+          ) : routines.length === 0 ? (
+            <Card className="bg-zinc-950/50 backdrop-blur-md border-white/5 border-dashed flex flex-col items-center justify-center p-8 text-center">
+              <ClipboardList className="w-8 h-8 text-zinc-600 mb-3" />
+              <p className="text-sm text-zinc-400 font-medium">No routines yet</p>
+              <p className="text-xs text-zinc-600 mt-1">Create a routine to save time.</p>
+            </Card>
+          ) : (
+            routines.map(routine => (
+              <Card key={routine.id} className="bg-zinc-950/50 backdrop-blur-md border-white/10 overflow-hidden group">
+                <div className="p-4 flex flex-col gap-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-white text-lg">{routine.name}</h3>
+                      <p className="text-sm text-zinc-400 mt-1">
+                        {routine.routine_exercises.length} exercises
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => handleStartRoutine(routine)}
+                      className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-colors"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Start
+                    </Button>
+                  </div>
+                  
+                  {/* Preview exercises */}
+                  <div className="flex flex-wrap gap-2">
+                    {routine.routine_exercises.slice(0, 3).map((re, idx) => (
+                      <div key={idx} className="flex items-center text-xs bg-zinc-900 text-zinc-300 px-2 py-1 rounded-md">
+                        <Dumbbell className="w-3 h-3 mr-1 text-emerald-500/70" />
+                        {re.exercises?.name || 'Unknown'}
+                      </div>
+                    ))}
+                    {routine.routine_exercises.length > 3 && (
+                      <div className="flex items-center text-xs bg-zinc-900 text-zinc-500 px-2 py-1 rounded-md">
+                        +{routine.routine_exercises.length - 3} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
         </div>
       </section>
     </div>

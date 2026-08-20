@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Search, Dumbbell } from 'lucide-react'
 import Link from 'next/link'
+import { FilterDropdown } from '@/components/FilterDropdown'
 
 type Exercise = {
   id: string
@@ -70,40 +71,14 @@ export default function ExerciseLibrary() {
       </div>
 
       {/* Filters (Scrollable Row) */}
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        <select 
-          value={muscleFilter}
-          onChange={(e) => setMuscleFilter(e.target.value)}
-          className="px-4 py-2 bg-zinc-900 border border-white/10 rounded-full text-xs font-medium text-white outline-none focus:ring-1 focus:ring-emerald-500 appearance-none"
-        >
-          {muscles.map(m => (
-            <option key={m} value={m}>{m === 'All' ? 'All Muscles' : m}</option>
-          ))}
-        </select>
-        
-        <select 
-          value={equipmentFilter}
-          onChange={(e) => setEquipmentFilter(e.target.value)}
-          className="px-4 py-2 bg-zinc-900 border border-white/10 rounded-full text-xs font-medium text-white outline-none focus:ring-1 focus:ring-emerald-500 appearance-none"
-        >
-          {equipment.map(e => (
-            <option key={e} value={e}>{e === 'All' ? 'All Equipment' : e}</option>
-          ))}
-        </select>
-
-        <select 
-          value={difficultyFilter}
-          onChange={(e) => setDifficultyFilter(e.target.value)}
-          className="px-4 py-2 bg-zinc-900 border border-white/10 rounded-full text-xs font-medium text-white outline-none focus:ring-1 focus:ring-emerald-500 appearance-none"
-        >
-          {difficulties.map(d => (
-            <option key={d} value={d}>{d === 'All' ? 'All Levels' : d}</option>
-          ))}
-        </select>
+      <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-hide -mx-6 px-6 relative z-50">
+        <FilterDropdown value={muscleFilter} options={muscles} onChange={setMuscleFilter} placeholder="All Muscles" />
+        <FilterDropdown value={equipmentFilter} options={equipment} onChange={setEquipmentFilter} placeholder="All Equipment" />
+        <FilterDropdown value={difficultyFilter} options={difficulties} onChange={setDifficultyFilter} placeholder="All Levels" />
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto pb-24 space-y-3">
+      <div className="flex-1 overflow-y-auto pb-24 space-y-3 -mx-4 px-4">
         {isLoading ? (
           <div className="text-center text-sm text-zinc-500 mt-10">Loading library...</div>
         ) : filteredExercises.length === 0 ? (
