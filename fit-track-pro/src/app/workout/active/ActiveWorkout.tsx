@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Check, Plus, Trash2, X, Search, Dumbbell, Timer, Play } from 'lucide-react'
+import { Check, Plus, X, Search, Dumbbell, Timer, Play } from 'lucide-react'
 
 // Types
 type SetData = {
@@ -37,7 +37,7 @@ export default function ActiveWorkout() {
 
   // State
   const [isLoaded, setIsLoaded] = useState(false)
-  const [startTime, setStartTime] = useState<number>(Date.now())
+  const [startTime, setStartTime] = useState<number>(() => Date.now())
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [exercises, setExercises] = useState<WorkoutExercise[]>([])
   
@@ -53,6 +53,7 @@ export default function ActiveWorkout() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setStartTime(parsed.startTime)
         setExercises(parsed.exercises || [])
       } catch (e) {
@@ -113,7 +114,7 @@ export default function ActiveWorkout() {
     }
 
     currentEx.sets.push({
-      id: Math.random().toString(36).substr(2, 9),
+      id: window.crypto.randomUUID(),
       weight: defaultWeight,
       reps: defaultReps,
       completed: false
@@ -121,11 +122,11 @@ export default function ActiveWorkout() {
     setExercises(newExercises)
   }
 
-  const removeSet = (exIndex: number, setIndex: number) => {
-    const newExercises = [...exercises]
-    newExercises[exIndex].sets.splice(setIndex, 1)
-    setExercises(newExercises)
-  }
+  // const removeSet = (exIndex: number, setIndex: number) => {
+  //   const newExercises = [...exercises]
+  //   newExercises[exIndex].sets.splice(setIndex, 1)
+  //   setExercises(newExercises)
+  // }
 
   const updateSet = (exIndex: number, setIndex: number, field: 'weight' | 'reps', value: string) => {
     const newExercises = [...exercises]
@@ -159,7 +160,7 @@ export default function ActiveWorkout() {
     setExercises([...exercises, {
       exercise_id: dbEx.id,
       name: dbEx.name,
-      sets: [{ id: Math.random().toString(36).substr(2, 9), weight: '', reps: '', completed: false }]
+      sets: [{ id: window.crypto.randomUUID(), weight: '', reps: '', completed: false }]
     }])
     setIsSelecting(false)
     setSearchQuery('')

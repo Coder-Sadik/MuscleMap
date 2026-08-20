@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Search, Filter, Dumbbell } from 'lucide-react'
+import { Search, Dumbbell } from 'lucide-react'
 import Link from 'next/link'
 
 type Exercise = {
@@ -27,7 +27,7 @@ export default function ExerciseLibrary() {
 
   useEffect(() => {
     async function fetchExercises() {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('exercises')
         .select('id, name, primary_muscle, equipment, difficulty')
         .order('name')
@@ -37,6 +37,7 @@ export default function ExerciseLibrary() {
     }
     
     fetchExercises()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const filteredExercises = exercises.filter((ex) => {
