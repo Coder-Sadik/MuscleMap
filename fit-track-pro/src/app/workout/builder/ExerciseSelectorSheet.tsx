@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { X, Search, Dumbbell } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { DBExercise } from './types'
 import { FilterDropdown } from '@/components/FilterDropdown'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
 
 type Props = {
   isOpen: boolean
@@ -15,6 +16,7 @@ type Props = {
 }
 
 export default function ExerciseSelectorSheet({ isOpen, onClose, onSelect }: Props) {
+  const { dict } = useLanguage()
   const supabase = createClient()
   const [dbExercises, setDbExercises] = useState<DBExercise[]>([])
   
@@ -25,39 +27,41 @@ export default function ExerciseSelectorSheet({ isOpen, onClose, onSelect }: Pro
   
   const [isLoading, setIsLoading] = useState(false)
 
-  useEffect(() => {
-    if (isOpen && dbExercises.length === 0) {
-      fetchExercises()
-    }
-  }, [isOpen])
-
-  const fetchExercises = async () => {
+  // B9 fix: stabilise fetchExercises with useCallback
+  const fetchExercises = useCallback(async () => {
     setIsLoading(true)
     const { data, error } = await supabase
       .from('exercises')
       .select('id, name, primary_muscle, equipment, difficulty')
       .order('name')
-    
+
     if (data) {
       setDbExercises(data)
     } else {
-      console.error("Failed to fetch exercises", error)
+      console.error('Failed to fetch exercises', error)
     }
     setIsLoading(false)
-  }
+  }, [supabase])
 
-  const filteredExercises = dbExercises.filter((ex) => {
+  useEffect(() => {
+    if (isOpen && dbExercises.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchExercises()
+    }
+  }, [isOpen, dbExercises.length, fetchExercises])
+
+  // P2 fix: memoize filter computations
+  const filteredExercises = useMemo(() => dbExercises.filter((ex) => {
     const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesMuscle = muscleFilter === 'All' || ex.primary_muscle === muscleFilter
     const matchesEquipment = equipmentFilter === 'All' || ex.equipment === equipmentFilter
     const matchesDifficulty = difficultyFilter === 'All' || ex.difficulty === difficultyFilter
-    
     return matchesSearch && matchesMuscle && matchesEquipment && matchesDifficulty
-  })
+  }), [dbExercises, searchQuery, muscleFilter, equipmentFilter, difficultyFilter])
 
   // Unique values for dropdowns
-  const muscles = ['All', ...Array.from(new Set(dbExercises.map(ex => ex.primary_muscle))).filter(Boolean)]
-  const equipment = ['All', ...Array.from(new Set(dbExercises.map(ex => ex.equipment))).filter(Boolean)]
+  const muscles = useMemo(() => ['All', ...Array.from(new Set(dbExercises.map(ex => ex.primary_muscle)))], [dbExercises])
+  const equipment = useMemo(() => ['All', ...Array.from(new Set(dbExercises.map(ex => ex.equipment)))], [dbExercises])
   const difficulties = ['All', 'Beginner', 'Intermediate', 'Advanced']
 
   if (!isOpen) return null
@@ -74,7 +78,7 @@ export default function ExerciseSelectorSheet({ isOpen, onClose, onSelect }: Pro
             <Input 
               autoFocus
               type="text" 
-              placeholder="Search exercises..." 
+              placeholder={dict.muscles.searchPlaceholder} 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-12 pl-10 pr-4 bg-zinc-950/50 border-white/10 rounded-xl text-white focus-visible:ring-emerald-500"
@@ -85,17 +89,17 @@ export default function ExerciseSelectorSheet({ isOpen, onClose, onSelect }: Pro
 
         {/* Filters (Scrollable Row) */}
         <div className="flex gap-2 overflow-x-auto pb-1 pt-1 scrollbar-hide -mx-4 px-4 relative z-50">
-          <FilterDropdown value={muscleFilter} options={muscles} onChange={setMuscleFilter} placeholder="All Muscles" />
-          <FilterDropdown value={equipmentFilter} options={equipment} onChange={setEquipmentFilter} placeholder="All Equipment" />
-          <FilterDropdown value={difficultyFilter} options={difficulties} onChange={setDifficultyFilter} placeholder="All Levels" />
+          <FilterDropdown value={muscleFilter} options={muscles} onChange={setMuscleFilter} placeholder={dict.muscles.allMuscles} />
+          <FilterDropdown value={equipmentFilter} options={equipment} onChange={setEquipmentFilter} placeholder={dict.muscles.allEquipment} />
+          <FilterDropdown value={difficultyFilter} options={difficulties} onChange={setDifficultyFilter} placeholder={dict.muscles.allLevels} />
         </div>
       </header>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-24">
         {isLoading ? (
-          <div className="text-center text-sm text-zinc-500 mt-10">Loading library...</div>
+          <div className="text-center text-sm text-zinc-500 mt-10">{dict.muscles.loadingLibrary}</div>
         ) : filteredExercises.length === 0 ? (
-          <div className="text-center text-sm text-zinc-500 mt-10">No exercises found.</div>
+          <div className="text-center text-sm text-zinc-500 mt-10">{dict.muscles.noExercisesFound}</div>
         ) : (
           filteredExercises.map(ex => (
             <div 

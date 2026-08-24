@@ -1,11 +1,15 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Check, Plus, Search, Dumbbell, Timer, Play, ChevronRight, ChevronLeft, SkipForward, Info, Minus } from 'lucide-react'
+import { toast } from 'sonner'
+import { Check, Plus, Search, Dumbbell, Timer, Play, ChevronRight, ChevronLeft, SkipForward, Minus } from 'lucide-react'
+import { ACTIVE_WORKOUT_KEY } from '@/lib/constants'
+import { formatTime } from '@/lib/utils'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
 
 // Types
 type SetData = {
@@ -27,37 +31,77 @@ type DBExercise = {
   primary_muscle: string
 }
 
-const LOCAL_STORAGE_KEY = 'muscles_map_active_workout'
+// ─── Skeleton Loader ─────────────────────────────────────────────────────────
+
+function WorkoutSkeleton() {
+  return (
+    <div className="flex flex-col min-h-screen bg-black pb-6 overflow-x-hidden">
+      <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
+        <div className="h-7 w-20 bg-zinc-800 rounded-lg animate-pulse" />
+        <div className="h-9 w-20 bg-zinc-800 rounded-xl animate-pulse" />
+      </header>
+      <main className="flex-1 flex flex-col pt-6 px-4 gap-6">
+        <div className="flex items-center justify-between">
+          <div className="h-10 w-10 bg-zinc-800 rounded-full animate-pulse" />
+          <div className="flex flex-col items-center gap-3 flex-1 px-6">
+            <div className="w-16 h-16 bg-zinc-800 rounded-2xl animate-pulse" />
+            <div className="h-7 w-48 bg-zinc-800 rounded-lg animate-pulse" />
+          </div>
+          <div className="h-10 w-10 bg-zinc-800 rounded-full animate-pulse" />
+        </div>
+        <div className="mt-auto">
+          <div className="bg-zinc-900/50 border border-white/10 rounded-3xl p-6 space-y-6">
+            <div className="h-6 w-32 bg-zinc-800 rounded animate-pulse" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="h-20 bg-zinc-800 rounded-2xl animate-pulse" />
+              <div className="h-20 bg-zinc-800 rounded-2xl animate-pulse" />
+            </div>
+            <div className="h-16 bg-zinc-800 rounded-2xl animate-pulse" />
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ActiveWorkout() {
   const router = useRouter()
-  const supabase = createClient()
+  const { dict, language } = useLanguage()
+  // B14: stabilise the supabase client — createClient() is cheap but
+  // using a ref prevents accidental dep-array churn in effects.
+  const supabase = useRef(createClient()).current
   const timerInterval = useRef<NodeJS.Timeout | null>(null)
   const activeLogIdRef = useRef<string | null>(null)
+  // B3: use a state counter to trigger a new rest timer effect on each new rest period.
+  // Using state (not a ref) means React can safely track it in the deps array.
 
   // State
   const [isLoaded, setIsLoaded] = useState(false)
   const [startTime, setStartTime] = useState<number>(() => Date.now())
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [exercises, setExercises] = useState<WorkoutExercise[]>([])
-  
+
   // Gym Mode State
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
   const [restSecondsRemaining, setRestSecondsRemaining] = useState<number | null>(null)
+  const [restTimerTrigger, setRestTimerTrigger] = useState(0)
   const [previousStats, setPreviousStats] = useState<Record<string, string>>({})
   const [previousVolumes, setPreviousVolumes] = useState<Record<string, number>>({})
   const [personalRecords, setPersonalRecords] = useState<Record<string, number>>({})
-  
+
   // Selector State
   const [isSelecting, setIsSelecting] = useState(false)
   const [dbExercises, setDbExercises] = useState<DBExercise[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [isFinishing, setIsFinishing] = useState(false)
 
-  // Load from LocalStorage on mount and Fetch Previous Stats
+  // ── Load from LocalStorage on mount & Fetch Previous Stats ───────────────
+
   useEffect(() => {
     const initializeWorkout = async () => {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY)
+      const saved = localStorage.getItem(ACTIVE_WORKOUT_KEY)
       let initialExercises: WorkoutExercise[] = []
       let loadedStartTime = Date.now()
 
@@ -67,13 +111,14 @@ export default function ActiveWorkout() {
           loadedStartTime = parsed.startTime || Date.now()
           initialExercises = parsed.exercises || []
         } catch (e) {
-          console.error("Failed to parse saved workout", e)
+          console.error('Failed to parse saved workout', e)
         }
       }
-      
+
       setStartTime(loadedStartTime)
 
-      // Fetch previous stats for autofill and PRs
+      // P1: limit to 20 most recent logs (was 100) — PRs are an approximation
+      // and 20 logs is far more than enough for autofill; this cuts the payload ~80%.
       const { data: { user } } = await supabase.auth.getUser()
       if (user && initialExercises.length > 0) {
         const { data } = await supabase
@@ -81,56 +126,50 @@ export default function ActiveWorkout() {
           .select('exercises_data')
           .eq('user_id', user.id)
           .order('start_time', { ascending: false })
-          .limit(100) // Fetch up to 100 past logs to compute PRs
+          .limit(20)
 
-        const pastStats: Record<string, { weight: string, reps: string }> = {}
+        const pastStats: Record<string, { weight: string; reps: string }> = {}
         const pastStrings: Record<string, string> = {}
         const prevVols: Record<string, number> = {}
         const prVols: Record<string, number> = {}
 
         if (data) {
-          for (let i = 0; i < data.length; i++) {
-            const log = data[i]
+          for (const log of data) {
             const pastExercises = log.exercises_data as WorkoutExercise[]
             if (Array.isArray(pastExercises)) {
               for (const pEx of pastExercises) {
-                // Calculate volume for this past exercise
                 let logVolume = 0
                 let hasCompletedSets = false
                 if (pEx.sets) {
-                   for (const s of pEx.sets) {
-                     if (s.completed) {
-                       const w = parseFloat(s.weight) || 0
-                       const r = parseFloat(s.reps) || 0
-                       logVolume += (w * r)
-                       hasCompletedSets = true
-                     }
-                   }
-                }
-                
-                // Track All-Time PR
-                if (hasCompletedSets) {
-                   if (!prVols[pEx.exercise_id] || logVolume > prVols[pEx.exercise_id]) {
-                     prVols[pEx.exercise_id] = logVolume
-                   }
+                  for (const s of pEx.sets) {
+                    if (s.completed) {
+                      const w = parseFloat(s.weight) || 0
+                      const r = parseFloat(s.reps) || 0
+                      logVolume += w * r
+                      hasCompletedSets = true
+                    }
+                  }
                 }
 
-                // Track most recent stats (for the first matching log only, since it's ordered descending by time)
+                if (hasCompletedSets) {
+                  if (!prVols[pEx.exercise_id] || logVolume > prVols[pEx.exercise_id]) {
+                    prVols[pEx.exercise_id] = logVolume
+                  }
+                }
+
                 if (!pastStats[pEx.exercise_id] && pEx.sets && pEx.sets.length > 0) {
                   const validSet = pEx.sets.find(s => s.completed && s.weight && s.reps) || pEx.sets[0]
                   if (validSet) {
                     pastStats[pEx.exercise_id] = { weight: validSet.weight, reps: validSet.reps }
-                    pastStrings[pEx.exercise_id] = `${pEx.sets.length} sets of ${validSet.reps} @ ${validSet.weight}kg`
-                    if (hasCompletedSets) {
-                      prevVols[pEx.exercise_id] = logVolume
-                    }
+                    pastStrings[pEx.exercise_id] = `${pEx.sets.length} sets × ${validSet.reps} @ ${validSet.weight}kg`
+                    if (hasCompletedSets) prevVols[pEx.exercise_id] = logVolume
                   }
                 }
               }
             }
           }
         }
-        
+
         setPreviousStats(pastStrings)
         setPreviousVolumes(prevVols)
         setPersonalRecords(prVols)
@@ -142,9 +181,9 @@ export default function ActiveWorkout() {
             ...ex,
             sets: ex.sets.map(s => ({
               ...s,
-              weight: s.weight || (stats ? stats.weight : '20'), // Mock if no history
-              reps: s.reps || (stats ? stats.reps : '10')
-            }))
+              weight: s.weight || (stats ? stats.weight : '20'),
+              reps: s.reps || (stats ? stats.reps : '10'),
+            })),
           }
         })
       }
@@ -154,20 +193,20 @@ export default function ActiveWorkout() {
     }
 
     initializeWorkout()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // supabase is a stable ref — safe to omit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Auto-save to LocalStorage
+  // ── Auto-save to LocalStorage ─────────────────────────────────────────────
+
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
-        startTime,
-        exercises
-      }))
+      localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ startTime, exercises }))
     }
   }, [exercises, startTime, isLoaded])
 
-  // Workout Duration Timer logic
+  // ── Workout Duration Timer ────────────────────────────────────────────────
+
   useEffect(() => {
     if (!isLoaded) return
     timerInterval.current = setInterval(() => {
@@ -178,44 +217,57 @@ export default function ActiveWorkout() {
     }
   }, [startTime, isLoaded])
 
-  // Rest Timer logic
+  // ── Rest Timer ────────────────────────────────────────────────────────────
+  // B3 fix: the effect is keyed to `restTimerTrigger`, a counter that only
+  // increments when a new rest period starts. This means exactly ONE interval
+  // is created per rest period, not one on every countdown tick.
+
   useEffect(() => {
-    if (restSecondsRemaining === null || restSecondsRemaining <= 0) return
+    if (restSecondsRemaining === null) return
+
     const interval = setInterval(() => {
-      setRestSecondsRemaining(prev => prev !== null ? prev - 1 : null)
+      setRestSecondsRemaining(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval)
+          return null
+        }
+        return prev - 1
+      })
     }, 1000)
+
     return () => clearInterval(interval)
-  }, [restSecondsRemaining])
+    // restSecondsRemaining is intentionally omitted: the effect should only
+    // fire when a *new* rest period starts (trigger increments), not on each tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restTimerTrigger])
 
-  const formatTime = (totalSeconds: number) => {
-    const hrs = Math.floor(totalSeconds / 3600)
-    const mins = Math.floor((totalSeconds % 3600) / 60)
-    const secs = totalSeconds % 60
-    if (hrs > 0) return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
+  // ── Supabase Sync ─────────────────────────────────────────────────────────
 
-  // --- Supabase Sync ---
-  const saveToSupabase = async (exercisesState: WorkoutExercise[]) => {
+  const saveToSupabase = useCallback(async (exercisesState: WorkoutExercise[]) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     if (!activeLogIdRef.current) {
-      const { data, error } = await supabase.from('workout_logs').insert({
-        user_id: user.id,
-        start_time: new Date(startTime).toISOString(),
-        exercises_data: exercisesState
-      }).select('id').single()
-      
+      const { data, error } = await supabase
+        .from('workout_logs')
+        .insert({
+          user_id: user.id,
+          start_time: new Date(startTime).toISOString(),
+          exercises_data: exercisesState,
+        })
+        .select('id')
+        .single()
+
       if (data) activeLogIdRef.current = data.id
-      if (error) console.error("Error creating log:", error)
+      if (error) console.error('Error creating log:', error)
     } else {
-      const { error } = await supabase.from('workout_logs').update({
-        exercises_data: exercisesState
-      }).eq('id', activeLogIdRef.current)
-      if (error) console.error("Error updating log:", error)
+      const { error } = await supabase
+        .from('workout_logs')
+        .update({ exercises_data: exercisesState })
+        .eq('id', activeLogIdRef.current)
+      if (error) console.error('Error updating log:', error)
     }
-  }
+  }, [supabase, startTime])
 
   const getCurrentVolume = (exercise: WorkoutExercise | undefined) => {
     if (!exercise) return 0
@@ -223,81 +275,92 @@ export default function ActiveWorkout() {
       if (!set.completed) return sum
       const w = parseFloat(set.weight) || 0
       const r = parseFloat(set.reps) || 0
-      return sum + (w * r)
+      return sum + w * r
     }, 0)
   }
 
-  // --- Actions ---
+  // ── Actions ───────────────────────────────────────────────────────────────
 
+  // B1 fix: properly deep-clone the nested set object before mutating the field.
   const updateSet = (exIndex: number, setIndex: number, field: 'weight' | 'reps', value: string) => {
-    const newExercises = [...exercises]
-    newExercises[exIndex].sets[setIndex][field] = value
-    setExercises(newExercises)
+    setExercises(prev => prev.map((ex, ei) => {
+      if (ei !== exIndex) return ex
+      return {
+        ...ex,
+        sets: ex.sets.map((s, si) => si === setIndex ? { ...s, [field]: value } : s),
+      }
+    }))
   }
 
+  // B2 fix: same deep-clone approach.
   const adjustSet = (exIndex: number, setIndex: number, field: 'weight' | 'reps', delta: number) => {
-    const newExercises = [...exercises]
-    const currentVal = parseFloat(newExercises[exIndex].sets[setIndex][field]) || 0
-    const newVal = Math.max(0, currentVal + delta)
-    newExercises[exIndex].sets[setIndex][field] = newVal.toString()
-    setExercises(newExercises)
+    setExercises(prev => prev.map((ex, ei) => {
+      if (ei !== exIndex) return ex
+      return {
+        ...ex,
+        sets: ex.sets.map((s, si) => {
+          if (si !== setIndex) return s
+          const currentVal = parseFloat(s[field]) || 0
+          const newVal = Math.max(0, currentVal + delta)
+          return { ...s, [field]: newVal.toString() }
+        }),
+      }
+    }))
   }
 
   const completeSet = async (exIndex: number, setIndex: number) => {
-    const newExercises = [...exercises]
-    newExercises[exIndex].sets[setIndex].completed = true
+    const newExercises = exercises.map((ex, ei) => {
+      if (ei !== exIndex) return ex
+      return {
+        ...ex,
+        sets: ex.sets.map((s, si) => si === setIndex ? { ...s, completed: true } : s),
+      }
+    })
     setExercises(newExercises)
-    
-    // Save to Supabase immediately in background
+
+    // Save to Supabase in background
     saveToSupabase(newExercises)
 
-    // Check if this was the last set of the exercise
-    const isLastSet = setIndex === newExercises[exIndex].sets.length - 1
-    
-    // Start Rest Timer
+    // B3 fix: increment the trigger to fire a new rest timer effect.
+    setRestTimerTrigger(t => t + 1)
     setRestSecondsRemaining(60)
 
-    // Auto-advance
+    const isLastSet = setIndex === exercises[exIndex].sets.length - 1
     if (isLastSet && exIndex < newExercises.length - 1) {
-      // Small delay before advancing to next exercise so user sees completion
-      setTimeout(() => {
-        setCurrentExerciseIndex(exIndex + 1)
-      }, 500)
+      setTimeout(() => setCurrentExerciseIndex(exIndex + 1), 500)
     }
   }
 
   const undoSet = (exIndex: number, setIndex: number) => {
-    const newExercises = [...exercises]
-    newExercises[exIndex].sets[setIndex].completed = false
+    const newExercises = exercises.map((ex, ei) => {
+      if (ei !== exIndex) return ex
+      return {
+        ...ex,
+        sets: ex.sets.map((s, si) => si === setIndex ? { ...s, completed: false } : s),
+      }
+    })
     setExercises(newExercises)
-    setRestSecondsRemaining(null) // Cancel rest timer if they undid
+    setRestSecondsRemaining(null)
     saveToSupabase(newExercises)
   }
 
   const addSet = (exIndex: number) => {
-    const newExercises = [...exercises]
-    const currentEx = newExercises[exIndex]
-    
-    let defaultWeight = '20'
-    let defaultReps = '10'
-    if (currentEx.sets.length > 0) {
-      const lastSet = currentEx.sets[currentEx.sets.length - 1]
-      defaultWeight = lastSet.weight
-      defaultReps = lastSet.reps
-    }
-
-    currentEx.sets.push({
-      id: window.crypto.randomUUID(),
-      weight: defaultWeight,
-      reps: defaultReps,
-      completed: false
-    })
-    setExercises(newExercises)
+    setExercises(prev => prev.map((ex, ei) => {
+      if (ei !== exIndex) return ex
+      const lastSet = ex.sets[ex.sets.length - 1]
+      const newSet: SetData = {
+        id: window.crypto.randomUUID(),
+        weight: lastSet?.weight ?? '20',
+        reps: lastSet?.reps ?? '10',
+        completed: false,
+      }
+      return { ...ex, sets: [...ex.sets, newSet] }
+    }))
   }
 
   const skipRest = () => setRestSecondsRemaining(null)
 
-  // --- Exercise Selector ---
+  // ── Exercise Selector ─────────────────────────────────────────────────────
 
   const openSelector = async () => {
     setIsSelecting(true)
@@ -308,52 +371,69 @@ export default function ActiveWorkout() {
   }
 
   const addExerciseToWorkout = (dbEx: DBExercise) => {
-    setExercises([...exercises, {
-      exercise_id: dbEx.id,
-      name: dbEx.name,
-      sets: [{ id: window.crypto.randomUUID(), weight: '20', reps: '10', completed: false }]
-    }])
+    setExercises(prev => {
+      const updated = [
+        ...prev,
+        {
+          exercise_id: dbEx.id,
+          name: dbEx.name,
+          sets: [{ id: window.crypto.randomUUID(), weight: '20', reps: '10', completed: false }],
+        },
+      ]
+      // B4 fix: read prev.length (the actual current length) to decide index
+      if (prev.length === 0) setCurrentExerciseIndex(0)
+      return updated
+    })
     setIsSelecting(false)
     setSearchQuery('')
-    if (exercises.length === 0) {
-      setCurrentExerciseIndex(0)
-    }
   }
 
-  const filteredDbExercises = dbExercises.filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredDbExercises = dbExercises.filter(ex =>
+    ex.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
-  // --- Finish Workout ---
+  // ── Finish Workout ────────────────────────────────────────────────────────
+
   const finishWorkout = async () => {
     if (exercises.length === 0) {
-      alert("Add some exercises first!")
+      toast.error(language === 'bn' ? 'শেষ করার আগে অন্তত একটি ব্যায়াম যোগ করুন।' : 'Add at least one exercise before finishing.')
       return
     }
     setIsFinishing(true)
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      if (activeLogIdRef.current) {
-        // Complete the existing log
-        await supabase.from('workout_logs').update({
-          end_time: new Date().toISOString(),
-          exercises_data: exercises
-        }).eq('id', activeLogIdRef.current)
-      } else {
-        // Workout was started but no sets were completed, create a finished log now
-        await supabase.from('workout_logs').insert({
-          user_id: user.id,
-          start_time: new Date(startTime).toISOString(),
-          end_time: new Date().toISOString(),
-          exercises_data: exercises
-        })
-      }
-    }
 
-    localStorage.removeItem(LOCAL_STORAGE_KEY)
-    router.push('/')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        if (activeLogIdRef.current) {
+          await supabase
+            .from('workout_logs')
+            .update({ end_time: new Date().toISOString(), exercises_data: exercises })
+            .eq('id', activeLogIdRef.current)
+        } else {
+          await supabase.from('workout_logs').insert({
+            user_id: user.id,
+            start_time: new Date(startTime).toISOString(),
+            end_time: new Date().toISOString(),
+            exercises_data: exercises,
+          })
+        }
+      }
+
+      localStorage.removeItem(ACTIVE_WORKOUT_KEY)
+      // B15 fix: show success toast before navigating away
+      toast.success(dict.workout.workoutSaved)
+      router.push('/')
+    } catch (err) {
+      console.error('Error finishing workout:', err)
+      toast.error(language === 'bn' ? 'সংরক্ষণ ব্যর্থ হয়েছে। আবার চেষ্টা করুন।' : 'Failed to save workout. Please try again.')
+      setIsFinishing(false)
+    }
   }
 
-  if (!isLoaded) return null 
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  // B13 fix: show a skeleton loader instead of returning null
+  if (!isLoaded) return <WorkoutSkeleton />
 
   const activeExercise = exercises[currentExerciseIndex]
   const currentSetIndex = activeExercise ? activeExercise.sets.findIndex(s => !s.completed) : -1
@@ -361,103 +441,117 @@ export default function ActiveWorkout() {
 
   return (
     <div className="flex flex-col min-h-screen bg-black pb-6 overflow-x-hidden selection:bg-emerald-500/30">
-      
+
       {/* Fixed Header */}
       <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2 text-emerald-400 font-mono text-xl font-bold">
           <Timer className="w-5 h-5" />
           {formatTime(elapsedSeconds)}
         </div>
-        
+
         {/* Progress Dots */}
         <div className="flex gap-1.5 absolute left-1/2 -translate-x-1/2">
           {exercises.map((_, idx) => (
-            <div 
-              key={idx} 
-              className={`w-2 h-2 rounded-full transition-colors ${idx === currentExerciseIndex ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : idx < currentExerciseIndex ? 'bg-emerald-900' : 'bg-zinc-800'}`} 
+            <button
+              key={idx}
+              onClick={() => setCurrentExerciseIndex(idx)}
+              aria-label={`Go to exercise ${idx + 1}`}
+              className={`w-2 h-2 rounded-full transition-colors ${
+                idx === currentExerciseIndex
+                  ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]'
+                  : idx < currentExerciseIndex
+                  ? 'bg-emerald-900'
+                  : 'bg-zinc-800'
+              }`}
             />
           ))}
         </div>
 
-        <Button onClick={finishWorkout} disabled={isFinishing} className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl shadow-[0_0_15px_-3px_rgba(16,185,129,0.4)]">
-          {isFinishing ? "Saving..." : "Finish"}
+        <Button
+          onClick={finishWorkout}
+          disabled={isFinishing}
+          className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl shadow-[0_0_15px_-3px_rgba(16,185,129,0.4)]"
+        >
+          {isFinishing ? dict.workout.saving : dict.workout.finish}
         </Button>
       </header>
 
       {/* Main Gym Mode View */}
       <main className="flex-1 flex flex-col pt-6 z-10 px-4">
-        
+
         {exercises.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in-95 duration-500">
             <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-4 border border-white/5 shadow-inner">
               <Play className="w-8 h-8 text-zinc-700 ml-1" />
             </div>
-            <h2 className="text-xl font-bold text-white mb-2">Workout Started</h2>
-            <p className="text-zinc-500 text-sm max-w-[250px] mb-8">Add your first exercise to begin tracking your sets and reps.</p>
+            <h2 className="text-xl font-bold text-white mb-2">{dict.workout.workoutStarted}</h2>
+            <p className="text-zinc-500 text-sm max-w-[250px] mb-8">{dict.workout.workoutStartedSub}</p>
             <Button onClick={openSelector} className="w-full max-w-xs h-14 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-lg border border-white/10 shadow-lg">
               <Plus className="w-6 h-6 mr-2 text-emerald-500" />
-              Add Exercise
+              {dict.workout.addExercise}
             </Button>
           </div>
         ) : (
           <div className="flex-1 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300 h-full">
-            
+
             {/* Exercise Header Navigation */}
             <div className="flex items-center justify-between mb-8">
-              <button 
+              <button
                 onClick={() => setCurrentExerciseIndex(Math.max(0, currentExerciseIndex - 1))}
                 disabled={currentExerciseIndex === 0}
                 className="p-3 bg-zinc-900 rounded-full text-zinc-400 disabled:opacity-30 transition-opacity"
+                aria-label="Previous exercise"
               >
                 <ChevronLeft className="w-6 h-6" />
               </button>
-              
+
               <div className="flex flex-col items-center text-center px-4 flex-1">
                 <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-4 border border-emerald-500/20 shadow-[0_0_30px_-5px_rgba(16,185,129,0.15)]">
                   <Dumbbell className="w-8 h-8 text-emerald-500" />
                 </div>
                 <h2 className="text-2xl font-black text-white leading-tight mb-3">{activeExercise.name}</h2>
-                
+
+                {previousStats[activeExercise.exercise_id] && (
+                  <p className="text-xs text-zinc-500 mb-2">{dict.workout.last}: {previousStats[activeExercise.exercise_id]}</p>
+                )}
+
                 <div className="flex flex-wrap justify-center items-center gap-2">
                   <div className="flex items-center gap-1 text-sm font-bold bg-zinc-900 px-3 py-1.5 rounded-xl text-white border border-white/10 shadow-sm">
-                    Vol: {getCurrentVolume(activeExercise).toLocaleString()} kg
+                    {dict.workout.volume}: {getCurrentVolume(activeExercise).toLocaleString()} {dict.common.kg}
                   </div>
 
                   {previousVolumes[activeExercise.exercise_id] !== undefined && (() => {
                     const prev = previousVolumes[activeExercise.exercise_id]
                     const curr = getCurrentVolume(activeExercise)
                     const diff = curr - prev
-                    
-                    if (diff > 0) {
-                      return (
-                        <div className="flex items-center gap-1 text-sm font-bold bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-500/20">
-                          ▲ +{diff.toLocaleString()} kg
-                        </div>
-                      )
-                    } else if (diff < 0 && activeExercise.sets.every(s => s.completed)) {
-                      return (
-                        <div className="flex items-center gap-1 text-sm font-bold bg-orange-500/10 text-orange-400 px-3 py-1.5 rounded-xl border border-orange-500/20">
-                          ▼ {diff.toLocaleString()} kg
-                        </div>
-                      )
-                    }
+                    if (diff > 0) return (
+                      <div className="flex items-center gap-1 text-sm font-bold bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+                        ▲ +{diff.toLocaleString()} {dict.common.kg}
+                      </div>
+                    )
+                    if (diff < 0 && activeExercise.sets.every(s => s.completed)) return (
+                      <div className="flex items-center gap-1 text-sm font-bold bg-orange-500/10 text-orange-400 px-3 py-1.5 rounded-xl border border-orange-500/20">
+                        ▼ {diff.toLocaleString()} {dict.common.kg}
+                      </div>
+                    )
                     return null
                   })()}
 
-                  {personalRecords[activeExercise.exercise_id] !== undefined && 
-                   getCurrentVolume(activeExercise) > 0 &&
-                   getCurrentVolume(activeExercise) > personalRecords[activeExercise.exercise_id] && (
-                    <div className="flex items-center gap-1 text-sm font-black bg-yellow-500/20 text-yellow-400 px-3 py-1.5 rounded-xl border border-yellow-500/30 shadow-[0_0_15px_-3px_rgba(234,179,8,0.3)] animate-pulse">
-                      🏆 PR!
-                    </div>
-                  )}
+                  {personalRecords[activeExercise.exercise_id] !== undefined &&
+                    getCurrentVolume(activeExercise) > 0 &&
+                    getCurrentVolume(activeExercise) > personalRecords[activeExercise.exercise_id] && (
+                      <div className="flex items-center gap-1 text-sm font-black bg-yellow-500/20 text-yellow-400 px-3 py-1.5 rounded-xl border border-yellow-500/30 shadow-[0_0_15px_-3px_rgba(234,179,8,0.3)] animate-pulse">
+                        🏆 {dict.workout.pr}
+                      </div>
+                    )}
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={() => setCurrentExerciseIndex(Math.min(exercises.length - 1, currentExerciseIndex + 1))}
                 disabled={currentExerciseIndex === exercises.length - 1}
                 className="p-3 bg-zinc-900 rounded-full text-zinc-400 disabled:opacity-30 transition-opacity"
+                aria-label="Next exercise"
               >
                 <ChevronRight className="w-6 h-6" />
               </button>
@@ -468,26 +562,36 @@ export default function ActiveWorkout() {
               <div className="flex-1 flex flex-col justify-end pb-8">
                 <div className="bg-zinc-900/50 border border-white/10 rounded-3xl p-6 shadow-2xl backdrop-blur-md">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-bold text-white">Set {currentSetIndex + 1} <span className="text-zinc-500 font-normal">of {activeExercise.sets.length}</span></h3>
+                    <h3 className="text-xl font-bold text-white">
+                      {dict.workout.set} {currentSetIndex + 1} <span className="text-zinc-500 font-normal">{dict.workout.of} {activeExercise.sets.length}</span>
+                    </h3>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 mb-8">
                     {/* Weight Input */}
                     <div className="flex flex-col items-center">
-                      <label className="text-zinc-500 text-sm font-semibold tracking-wider uppercase mb-3">Weight (kg)</label>
+                      <label className="text-zinc-500 text-sm font-semibold tracking-wider uppercase mb-3">{dict.workout.weight}</label>
                       <div className="flex items-center gap-2 w-full bg-black/50 p-1.5 rounded-2xl border border-white/5">
-                        <button onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'weight', -2.5)} className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0">
+                        <button
+                          onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'weight', -2.5)}
+                          className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0"
+                          aria-label="Decrease weight"
+                        >
                           <Minus className="w-5 h-5" />
                         </button>
-                        <Input 
-                          type="text" 
+                        <Input
+                          type="text"
                           inputMode="decimal"
                           value={activeSet.weight}
                           onChange={(e) => updateSet(currentExerciseIndex, currentSetIndex, 'weight', e.target.value)}
                           className="flex-1 min-w-0 h-10 text-center text-2xl font-black bg-transparent border-none focus-visible:ring-0 px-0 text-white"
                           suppressHydrationWarning
                         />
-                        <button onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'weight', 2.5)} className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0">
+                        <button
+                          onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'weight', 2.5)}
+                          className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0"
+                          aria-label="Increase weight"
+                        >
                           <Plus className="w-5 h-5" />
                         </button>
                       </div>
@@ -495,31 +599,40 @@ export default function ActiveWorkout() {
 
                     {/* Reps Input */}
                     <div className="flex flex-col items-center">
-                      <label className="text-zinc-500 text-sm font-semibold tracking-wider uppercase mb-3">Reps</label>
+                      <label className="text-zinc-500 text-sm font-semibold tracking-wider uppercase mb-3">{dict.workout.reps}</label>
                       <div className="flex items-center gap-2 w-full bg-black/50 p-1.5 rounded-2xl border border-white/5">
-                        <button onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'reps', -1)} className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0">
+                        <button
+                          onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'reps', -1)}
+                          className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0"
+                          aria-label="Decrease reps"
+                        >
                           <Minus className="w-5 h-5" />
                         </button>
-                        <Input 
-                          type="text" 
+                        <Input
+                          type="text"
                           inputMode="numeric"
                           value={activeSet.reps}
                           onChange={(e) => updateSet(currentExerciseIndex, currentSetIndex, 'reps', e.target.value)}
                           className="flex-1 min-w-0 h-10 text-center text-2xl font-black bg-transparent border-none focus-visible:ring-0 px-0 text-white"
                           suppressHydrationWarning
                         />
-                        <button onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'reps', 1)} className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0">
+                        <button
+                          onClick={() => adjustSet(currentExerciseIndex, currentSetIndex, 'reps', 1)}
+                          className="w-10 h-10 flex items-center justify-center bg-zinc-800 rounded-xl text-white hover:bg-zinc-700 active:scale-95 transition-all shrink-0"
+                          aria-label="Increase reps"
+                        >
                           <Plus className="w-5 h-5" />
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  <Button 
+                  <Button
                     onClick={() => completeSet(currentExerciseIndex, currentSetIndex)}
                     className="w-full h-16 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xl shadow-[0_0_30px_-5px_rgba(16,185,129,0.5)] active:scale-[0.98] transition-all"
                   >
-                    Complete Set
+                    <Check className="w-6 h-6 mr-2" strokeWidth={3} />
+                    {dict.workout.completeSet}
                   </Button>
                 </div>
               </div>
@@ -530,46 +643,46 @@ export default function ActiveWorkout() {
                   <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                     <Check className="w-10 h-10 text-emerald-500" strokeWidth={3} />
                   </div>
-                  <h3 className="text-2xl font-black text-white mb-2">Exercise Complete</h3>
-                  <p className="text-zinc-400 mb-8">{activeExercise.sets.length} sets finished.</p>
-                  
+                  <h3 className="text-2xl font-black text-white mb-2">{dict.workout.exerciseComplete}</h3>
+                  <p className="text-zinc-400 mb-8">{activeExercise.sets.length} {dict.workout.setsFinished}</p>
+
                   <div className="flex flex-col gap-3">
                     {currentExerciseIndex < exercises.length - 1 ? (
-                      <Button 
+                      <Button
                         onClick={() => setCurrentExerciseIndex(currentExerciseIndex + 1)}
                         className="w-full h-14 rounded-2xl bg-emerald-500 text-white font-bold text-lg shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]"
                       >
-                        Next Exercise
+                        {dict.workout.nextExercise}
                       </Button>
                     ) : (
-                      <Button 
+                      <Button
                         onClick={finishWorkout}
                         disabled={isFinishing}
                         className="w-full h-14 rounded-2xl bg-emerald-500 text-white font-bold text-lg shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]"
                       >
-                        {isFinishing ? "Saving..." : "Finish Workout"}
+                        {isFinishing ? dict.workout.saving : dict.workout.finishWorkout}
                       </Button>
                     )}
-                    
-                    <Button 
-                      variant="ghost" 
+
+                    <Button
+                      variant="ghost"
                       onClick={() => undoSet(currentExerciseIndex, activeExercise.sets.length - 1)}
                       className="w-full h-14 rounded-2xl text-zinc-400 hover:text-white"
                     >
-                      Undo Last Set
+                      {dict.workout.undoLastSet}
                     </Button>
                   </div>
                 </div>
               </div>
             )}
-            
+
             {/* Action Bar */}
-            <div className="flex gap-4 mt-auto">
+            <div className="flex gap-4 mt-auto pt-4">
               <Button onClick={() => addSet(currentExerciseIndex)} variant="outline" className="flex-1 h-12 rounded-xl border-dashed border-white/20 bg-transparent hover:bg-zinc-900 hover:text-white text-zinc-400">
-                <Plus className="w-4 h-4 mr-2" /> Add Set
+                <Plus className="w-4 h-4 mr-2" /> {dict.workout.addSet}
               </Button>
               <Button onClick={openSelector} variant="outline" className="flex-1 h-12 rounded-xl border-white/10 bg-zinc-900 hover:bg-zinc-800 text-white shadow-md">
-                <Search className="w-4 h-4 mr-2" /> Find Ex.
+                <Search className="w-4 h-4 mr-2" /> {dict.workout.findExercise}
               </Button>
             </div>
 
@@ -582,13 +695,13 @@ export default function ActiveWorkout() {
         <div className="fixed inset-x-0 bottom-0 top-[72px] z-30 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
           <div className="bg-zinc-900 border border-white/10 p-10 rounded-[3rem] flex flex-col items-center shadow-2xl">
             <Timer className="w-12 h-12 text-emerald-500 mb-6" />
-            <h3 className="text-zinc-400 font-bold uppercase tracking-widest text-sm mb-2">Rest</h3>
+            <h3 className="text-zinc-400 font-bold uppercase tracking-widest text-sm mb-2">{dict.workout.rest}</h3>
             <div className="text-7xl font-black text-white font-mono mb-8 tracking-tighter">
               {formatTime(restSecondsRemaining)}
             </div>
             <Button onClick={skipRest} className="h-14 px-8 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-lg border border-white/5 transition-all">
               <SkipForward className="w-5 h-5 mr-2" />
-              Skip Rest
+              {dict.workout.skipRest}
             </Button>
           </div>
         </div>
@@ -603,10 +716,10 @@ export default function ActiveWorkout() {
             </Button>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-              <Input 
+              <Input
                 autoFocus
-                type="text" 
-                placeholder="Search exercises..." 
+                type="text"
+                placeholder={dict.workout.searchExercises}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full h-10 pl-9 pr-4 bg-zinc-900 border-none rounded-xl text-white focus-visible:ring-1 focus-visible:ring-emerald-500"
@@ -614,16 +727,16 @@ export default function ActiveWorkout() {
               />
             </div>
           </header>
-          
+
           <div className="flex-1 overflow-y-auto p-4 space-y-2 pb-24">
             {dbExercises.length === 0 ? (
-              <div className="text-center text-zinc-500 mt-10">Loading...</div>
+              <div className="text-center text-zinc-500 mt-10">{dict.workout.loading}</div>
             ) : filteredDbExercises.length === 0 ? (
-              <div className="text-center text-zinc-500 mt-10">No exercises found.</div>
+              <div className="text-center text-zinc-500 mt-10">{dict.workout.noExercisesFound}</div>
             ) : (
               filteredDbExercises.map(ex => (
-                <div 
-                  key={ex.id} 
+                <div
+                  key={ex.id}
                   onClick={() => addExerciseToWorkout(ex)}
                   className="flex items-center gap-4 p-4 bg-zinc-950 border border-white/5 rounded-2xl cursor-pointer hover:bg-zinc-900 transition-colors"
                 >

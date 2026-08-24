@@ -9,10 +9,13 @@ import { PREDEFINED_PLANS, PredefinedPlan } from './predefinedPlans'
 import { BuilderRoutine } from './types'
 import RoutineEditor from './RoutineEditor'
 import Link from 'next/link'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
+import { toast } from 'sonner'
 
 export default function BuilderPage() {
   const router = useRouter()
   const supabase = createClient()
+  const { language } = useLanguage()
   
   const [step, setStep] = useState<1 | 2>(1)
   const [routines, setRoutines] = useState<BuilderRoutine[]>([])
@@ -47,7 +50,7 @@ export default function BuilderPage() {
   const handleCreateCustom = (days: number) => {
     const newRoutines: BuilderRoutine[] = Array.from({ length: days }).map((_, i) => ({
       id: window.crypto.randomUUID(),
-      name: `Day ${i + 1}`,
+      name: language === 'bn' ? `দিন ${i + 1}` : `Day ${i + 1}`,
       exercises: []
     }))
     setRoutines(newRoutines)
@@ -58,7 +61,6 @@ export default function BuilderPage() {
     setIsSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      alert('You must be logged in to save routines.')
       setIsSaving(false)
       return
     }
@@ -73,9 +75,8 @@ export default function BuilderPage() {
           .insert({
             user_id: user.id,
             name: routine.name,
-            notes: 'Created via Weekly Builder'
           })
-          .select()
+          .select('id')
           .single()
 
         if (routineError) throw routineError
@@ -100,10 +101,11 @@ export default function BuilderPage() {
         }
       }
       
+      toast.success(language === 'bn' ? 'রুটিন সফলভাবে সংরক্ষিত হয়েছে!' : 'Routines saved successfully!')
       router.push('/workout')
     } catch (e) {
       console.error("Error saving routines", e)
-      alert("There was an error saving your routines.")
+      toast.error(language === 'bn' ? 'রুটিন সংরক্ষণে ত্রুটি হয়েছে।' : 'There was an error saving your routines.')
     } finally {
       setIsSaving(false)
     }
@@ -116,12 +118,16 @@ export default function BuilderPage() {
           <Link href="/workout" className="text-zinc-400 hover:text-white transition-colors">
             <ChevronLeft className="w-6 h-6" />
           </Link>
-          <h1 className="text-xl font-bold text-white">Routine Builder</h1>
+          <h1 className="text-xl font-bold text-white">
+            {language === 'bn' ? 'রুটিন বিল্ডার' : 'Routine Builder'}
+          </h1>
         </header>
 
         <main className="p-4 space-y-8 animate-in fade-in duration-500">
           <div>
-            <h2 className="text-lg font-bold text-emerald-400 mb-4">Predefined Templates</h2>
+            <h2 className="text-lg font-bold text-emerald-400 mb-4">
+              {language === 'bn' ? 'প্রি-ডিফাইন্ড টেমপ্লেট' : 'Predefined Templates'}
+            </h2>
             <div className="space-y-3">
               {PREDEFINED_PLANS.map(plan => (
                 <div 
@@ -137,7 +143,9 @@ export default function BuilderPage() {
           </div>
 
           <div>
-            <h2 className="text-lg font-bold text-emerald-400 mb-4">Custom Split</h2>
+            <h2 className="text-lg font-bold text-emerald-400 mb-4">
+              {language === 'bn' ? 'কাস্টম স্প্লিট' : 'Custom Split'}
+            </h2>
             <div className="grid grid-cols-3 gap-3">
               {[3, 4, 5].map(days => (
                 <button
@@ -146,7 +154,9 @@ export default function BuilderPage() {
                   className="bg-zinc-900/50 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all active:scale-95"
                 >
                   <span className="text-3xl font-black text-white">{days}</span>
-                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Days</span>
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                    {language === 'bn' ? 'দিন' : 'Days'}
+                  </span>
                 </button>
               ))}
             </div>
@@ -163,7 +173,9 @@ export default function BuilderPage() {
           <button onClick={() => setStep(1)} className="text-zinc-400 hover:text-white transition-colors">
             <ChevronLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-xl font-bold text-white">Edit Split</h1>
+          <h1 className="text-xl font-bold text-white">
+            {language === 'bn' ? 'স্প্লিট এডিট করুন' : 'Edit Split'}
+          </h1>
         </div>
         
         {/* Day Navigator */}
@@ -214,10 +226,10 @@ export default function BuilderPage() {
           disabled={isSaving}
           className="w-full h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-lg shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] transition-all active:scale-95"
         >
-          {isSaving ? "Saving..." : (
+          {isSaving ? (language === 'bn' ? 'সংরক্ষণ হচ্ছে...' : 'Saving...') : (
             <>
               <Save className="w-5 h-5 mr-2" />
-              Save Routines
+              {language === 'bn' ? 'রুটিন সংরক্ষণ করুন' : 'Save Routines'}
             </>
           )}
         </Button>

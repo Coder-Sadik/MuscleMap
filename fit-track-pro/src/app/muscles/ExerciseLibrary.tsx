@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Search, Dumbbell } from 'lucide-react'
 import Link from 'next/link'
 import { FilterDropdown } from '@/components/FilterDropdown'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
 
 type Exercise = {
   id: string
@@ -17,6 +18,7 @@ type Exercise = {
 }
 
 export default function ExerciseLibrary() {
+  const { dict } = useLanguage()
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [muscleFilter, setMuscleFilter] = useState('All')
@@ -41,18 +43,22 @@ export default function ExerciseLibrary() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const filteredExercises = exercises.filter((ex) => {
+  // P2 fix: memoize all filter computations to avoid rerunning on every keystroke
+  const filteredExercises = useMemo(() => exercises.filter((ex) => {
     const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesMuscle = muscleFilter === 'All' || ex.primary_muscle === muscleFilter
     const matchesEquipment = equipmentFilter === 'All' || ex.equipment === equipmentFilter
     const matchesDifficulty = difficultyFilter === 'All' || ex.difficulty === difficultyFilter
-    
     return matchesSearch && matchesMuscle && matchesEquipment && matchesDifficulty
-  })
+  }), [exercises, searchQuery, muscleFilter, equipmentFilter, difficultyFilter])
 
   // Unique values for dropdowns
-  const muscles = ['All', ...Array.from(new Set(exercises.map(ex => ex.primary_muscle)))]
-  const equipment = ['All', ...Array.from(new Set(exercises.map(ex => ex.equipment)))]
+  const muscles = useMemo(() =>
+    ['All', ...Array.from(new Set(exercises.map(ex => ex.primary_muscle))).filter(Boolean)]
+  , [exercises])
+  const equipment = useMemo(() =>
+    ['All', ...Array.from(new Set(exercises.map(ex => ex.equipment))).filter(Boolean)]
+  , [exercises])
   const difficulties = ['All', 'Beginner', 'Intermediate', 'Advanced']
 
   return (
@@ -63,7 +69,7 @@ export default function ExerciseLibrary() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
         <Input 
           type="text" 
-          placeholder="Search exercises..." 
+          placeholder={dict.muscles.searchPlaceholder} 
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full h-12 pl-10 pr-4 bg-zinc-950/50 border-white/10 rounded-xl text-white focus-visible:ring-emerald-500"
@@ -72,17 +78,17 @@ export default function ExerciseLibrary() {
 
       {/* Filters (Scrollable Row) */}
       <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-hide -mx-6 px-6 relative z-50">
-        <FilterDropdown value={muscleFilter} options={muscles} onChange={setMuscleFilter} placeholder="All Muscles" />
-        <FilterDropdown value={equipmentFilter} options={equipment} onChange={setEquipmentFilter} placeholder="All Equipment" />
-        <FilterDropdown value={difficultyFilter} options={difficulties} onChange={setDifficultyFilter} placeholder="All Levels" />
+        <FilterDropdown value={muscleFilter} options={muscles} onChange={setMuscleFilter} placeholder={dict.muscles.allMuscles} />
+        <FilterDropdown value={equipmentFilter} options={equipment} onChange={setEquipmentFilter} placeholder={dict.muscles.allEquipment} />
+        <FilterDropdown value={difficultyFilter} options={difficulties} onChange={setDifficultyFilter} placeholder={dict.muscles.allLevels} />
       </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto pb-24 space-y-3 -mx-4 px-4">
         {isLoading ? (
-          <div className="text-center text-sm text-zinc-500 mt-10">Loading library...</div>
+          <div className="text-center text-sm text-zinc-500 mt-10">{dict.muscles.loadingLibrary}</div>
         ) : filteredExercises.length === 0 ? (
-          <div className="text-center text-sm text-zinc-500 mt-10">No exercises found.</div>
+          <div className="text-center text-sm text-zinc-500 mt-10">{dict.muscles.noExercisesFound}</div>
         ) : (
           filteredExercises.map(ex => (
             <Link href={`/muscles/${ex.id}`} key={ex.id} className="block">

@@ -1,14 +1,16 @@
 'use client'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Download, Upload, AlertCircle, CheckCircle2, FileText, Loader2, Database, Trophy } from 'lucide-react'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
 
 // CSV Parser Helper
 function parseCSV(text: string) {
   const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0)
-  if (lines.length === 0) return []
+  if (lines.length === 0) return { headers: [], rows: [] }
   
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
   const rows = []
@@ -27,10 +29,11 @@ function parseCSV(text: string) {
 
 function generateCSV(headers: string[], rows: any[]) {
   const headerRow = headers.join(',')
-  const dataRows = rows.map(row => 
+  const dataRows = rows.map(row =>
     headers.map(h => {
       const val = row[h]
-      // Escape commas and quotes
+      // B6 fix: guard against undefined/null values before calling string methods
+      if (val == null) return ''
       if (typeof val === 'string' && (val.includes(',') || val.includes('"'))) {
         return `"${val.replace(/"/g, '""')}"`
       }
@@ -43,6 +46,7 @@ function generateCSV(headers: string[], rows: any[]) {
 export function DataManagement() {
   const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { language } = useLanguage()
   
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
@@ -56,138 +60,173 @@ export function DataManagement() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      const { data: logs } = await supabase.from('workout_logs').select('*').eq('user_id', user.id).order('start_time', { ascending: true })
-      if (!logs || logs.length === 0) {
-        alert("No workout logs found to export.")
-        return
-      }
-
-      let csvContent = ""
-      let filename = ""
-
       if (type === 'history') {
-        const headers = ['Date', 'Exercise', 'Set Number', 'Reps', 'Weight']
-        const rows: any[] = []
-        logs.forEach(log => {
-          const date = new Date(log.start_time).toLocaleDateString()
-          if (Array.isArray(log.exercises_data)) {
-            log.exercises_data.forEach((ex: any) => {
-              if (Array.isArray(ex.sets)) {
-                ex.sets.forEach((set: any, i: number) => {
-                  if (set.completed) {
-                    rows.push({ Date: date, Exercise: ex.name, 'Set Number': i + 1, Reps: set.reps, Weight: set.weight })
-                  }
-                })
-              }
-            })
-          }
-        })
-        csvContent = generateCSV(headers, rows)
-        filename = "workout_history.csv"
-      } 
-      
-      else if (type === 'stats') {
-        const headers = ['Date', 'Total Volume (kg)', 'Total Sets', 'Primary Muscles']
-        const { data: exercises } = await supabase.from('exercises').select('id, primary_muscle')
-        const exMap = new Map((exercises || []).map(e => [e.id, e.primary_muscle]))
-        
-        const rows: any[] = []
-        logs.forEach(log => {
-          const date = new Date(log.start_time).toLocaleDateString()
-          let volume = 0
-          let sets = 0
-          const muscles = new Set<string>()
-          
-          if (Array.isArray(log.exercises_data)) {
-            log.exercises_data.forEach((ex: any) => {
-              muscles.add(exMap.get(ex.exercise_id) || 'Other')
-              if (Array.isArray(ex.sets)) {
-                ex.sets.forEach((s: any) => {
-                  if (s.completed) {
-                    sets++
-                    volume += (parseFloat(s.weight) || 0) * (parseFloat(s.reps) || 0)
-                  }
-                })
-              }
-            })
-          }
-          rows.push({ Date: date, 'Total Volume (kg)': volume, 'Total Sets': sets, 'Primary Muscles': Array.from(muscles).join('; ') })
-        })
-        csvContent = generateCSV(headers, rows)
-        filename = "workout_stats.csv"
-      }
-      
-      else if (type === 'prs') {
-        const headers = ['Exercise', 'Max Weight (kg)', 'Max Volume (kg)']
-        const prs: Record<string, { weight: number, volume: number }> = {}
-        
-        logs.forEach(log => {
-          if (Array.isArray(log.exercises_data)) {
-            log.exercises_data.forEach((ex: any) => {
-              let exVol = 0
-              let maxW = 0
-              if (Array.isArray(ex.sets)) {
-                ex.sets.forEach((s: any) => {
-                  if (s.completed) {
-                    const w = parseFloat(s.weight) || 0
-                    const r = parseFloat(s.reps) || 0
-                    if (w > maxW) maxW = w
-                    exVol += w * r
-                  }
-                })
-              }
-              if (!prs[ex.name]) prs[ex.name] = { weight: 0, volume: 0 }
-              if (maxW > prs[ex.name].weight) prs[ex.name].weight = maxW
-              if (exVol > prs[ex.name].volume) prs[ex.name].volume = exVol
-            })
-          }
-        })
-        
-        const rows = Object.entries(prs).map(([name, data]) => ({ Exercise: name, 'Max Weight (kg)': data.weight, 'Max Volume (kg)': data.volume }))
-        csvContent = generateCSV(headers, rows)
-        filename = "personal_records.csv"
-      }
+        const { data, error } = await supabase
+          .from('workout_logs')
+          .select('id, start_time, end_time, notes, exercises_data')
+          .eq('user_id', user.id)
+          .order('start_time', { ascending: false })
 
-      // Download Trigger
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement("a")
-      const url = URL.createObjectURL(blob)
-      link.setAttribute("href", url)
-      link.setAttribute("download", filename)
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
+        if (error) throw error
+
+        const flatRows: any[] = []
+        data?.forEach((log: any) => {
+          if (Array.isArray(log.exercises_data)) {
+            log.exercises_data.forEach((ex: any) => {
+              if (Array.isArray(ex.sets)) {
+                ex.sets.forEach((set: any, sIdx: number) => {
+                  flatRows.push({
+                    log_id: log.id,
+                    start_time: log.start_time,
+                    end_time: log.end_time || '',
+                    exercise_name: ex.name,
+                    set_number: sIdx + 1,
+                    weight_kg: set.weight,
+                    reps: set.reps,
+                    completed: set.completed,
+                    notes: log.notes || ''
+                  })
+                })
+              }
+            })
+          }
+        })
+
+        const csv = generateCSV(['log_id', 'start_time', 'end_time', 'exercise_name', 'set_number', 'weight_kg', 'reps', 'completed', 'notes'], flatRows)
+        downloadFile(csv, `workout-history-${new Date().toISOString().split('T')[0]}.csv`, 'text/csv')
+      } else if (type === 'stats') {
+        const { data, error } = await supabase
+          .from('workout_logs')
+          .select('id, start_time, exercises_data')
+          .eq('user_id', user.id)
+
+        if (error) throw error
+
+        const totalWorkouts = data?.length || 0
+        let totalVolume = 0
+        
+        data?.forEach((log: any) => {
+          if (Array.isArray(log.exercises_data)) {
+            log.exercises_data.forEach((ex: any) => {
+              if (Array.isArray(ex.sets)) {
+                ex.sets.forEach((set: any) => {
+                  if (set.completed) {
+                    totalVolume += (parseFloat(set.weight) || 0) * (parseFloat(set.reps) || 0)
+                  }
+                })
+              }
+            })
+          }
+        })
+
+        const summaryRows = [
+          { metric: 'Total Workouts', value: totalWorkouts },
+          { metric: 'Total Volume (kg)', value: totalVolume },
+          { metric: 'Generated Date', value: new Date().toISOString() }
+        ]
+
+        const csv = generateCSV(['metric', 'value'], summaryRows)
+        downloadFile(csv, `workout-stats-${new Date().toISOString().split('T')[0]}.csv`, 'text/csv')
+      } else if (type === 'prs') {
+        const { data, error } = await supabase
+          .from('workout_logs')
+          .select('exercises_data')
+          .eq('user_id', user.id)
+
+        if (error) throw error
+
+        const maxWeights: Record<string, number> = {}
+        const maxVolumes: Record<string, number> = {}
+
+        data?.forEach((log: any) => {
+          if (Array.isArray(log.exercises_data)) {
+            log.exercises_data.forEach((ex: any) => {
+              if (Array.isArray(ex.sets)) {
+                ex.sets.forEach((set: any) => {
+                  if (set.completed) {
+                    const w = parseFloat(set.weight) || 0
+                    const r = parseFloat(set.reps) || 0
+                    const v = w * r
+
+                    if (!maxWeights[ex.name] || w > maxWeights[ex.name]) maxWeights[ex.name] = w
+                    if (!maxVolumes[ex.name] || v > maxVolumes[ex.name]) maxVolumes[ex.name] = v
+                  }
+                })
+              }
+            })
+          }
+        })
+
+        const prRows = Object.keys(maxWeights).map(name => ({
+          exercise_name: name,
+          max_weight_kg: maxWeights[name],
+          max_single_set_volume: maxVolumes[name]
+        }))
+
+        const csv = generateCSV(['exercise_name', 'max_weight_kg', 'max_single_set_volume'], prRows)
+        downloadFile(csv, `personal-records-${new Date().toISOString().split('T')[0]}.csv`, 'text/csv')
+      }
     } catch (e: any) {
-      alert("Export failed: " + e.message)
+      console.error(e)
     } finally {
       setIsExporting(false)
     }
   }
 
+  const downloadFile = (content: string, filename: string, type: string) => {
+    const blob = new Blob([content], { type })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   // --- Import Logic ---
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    setImportStatus(null)
-    setPreviewData(null)
-    
     if (!file) return
-    
+
+    setImportStatus(null)
     const reader = new FileReader()
     reader.onload = (event) => {
-      const text = event.target?.result as string
-      const { headers, rows } = parseCSV(text)
-      
-      // Validate Columns
-      const required = ['day', 'exercise', 'sets', 'reps', 'weight', 'rest_seconds']
-      const missing = required.filter(r => !headers.includes(r))
-      
-      if (missing.length > 0) {
-        setImportStatus({ type: 'error', msg: `Missing required columns: ${missing.join(', ')}` })
-        return
+      try {
+        const text = event.target?.result as string
+        const parsed = parseCSV(text)
+        
+        const required = ['day', 'exercise', 'sets', 'reps']
+        const hasRequired = required.every(r => parsed.headers.includes(r))
+        
+        if (!hasRequired) {
+          setImportStatus({
+            type: 'error',
+            msg: language === 'bn' 
+              ? `সিএসভি ফাইলে অবশ্যই কলাম থাকতে হবে: ${required.join(', ')}`
+              : `CSV is missing required headers: ${required.join(', ')}`
+          })
+          setPreviewData(null)
+          return
+        }
+
+        if (parsed.rows.length === 0) {
+          setImportStatus({ 
+            type: 'error', 
+            msg: language === 'bn' ? "সিএসভি ফাইলে কোনো ডেটা পাওয়া যায়নি।" : "CSV file contains no data rows." 
+          })
+          setPreviewData(null)
+          return
+        }
+
+        setPreviewData(parsed)
+      } catch (err: any) {
+        setImportStatus({ 
+          type: 'error', 
+          msg: language === 'bn' ? "সিএসভি পার্স করতে ত্রুটি হয়েছে।" : "Failed to parse CSV file: " + err.message 
+        })
       }
-      
-      setPreviewData({ headers, rows })
     }
     reader.readAsText(file)
   }
@@ -196,76 +235,82 @@ export function DataManagement() {
     if (!previewData) return
     setIsImporting(true)
     setImportStatus(null)
-    
+
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
+
+      const routinesByDay: Record<string, any[]> = {}
       
-      // We will group by 'day' to create Routine -> Routine Exercises
-      const routinesMap: Record<string, any[]> = {}
-      previewData.rows.forEach(row => {
-        const day = row['day'] || 'Unknown Day'
-        if (!routinesMap[day]) routinesMap[day] = []
-        routinesMap[day].push(row)
-      })
+      for (const row of previewData.rows) {
+        const day = row['day'] || 'Imported Routine'
+        if (!routinesByDay[day]) routinesByDay[day] = []
+        routinesByDay[day].push(row)
+      }
 
-      for (const [day, rows] of Object.entries(routinesMap)) {
-        // 1. Create or Find Routine
-        const { data: existingRoutine } = await supabase.from('workout_routines')
-          .select('id').eq('user_id', user.id).eq('name', day).single()
-          
-        let routineId = existingRoutine?.id
-        
-        if (!routineId) {
-          const { data: newRoutine, error: rErr } = await supabase.from('workout_routines')
-            .insert({ user_id: user.id, name: day, notes: 'Imported from CSV' })
-            .select('id').single()
-            
-          if (rErr) throw new Error(`Failed to create routine '${day}': ${rErr.message}`)
-          routineId = newRoutine.id
-        }
+      for (const [dayName, exercises] of Object.entries(routinesByDay)) {
+        const { data: routineData, error: routineError } = await supabase
+          .from('workout_routines')
+          .insert({
+            user_id: user.id,
+            name: dayName,
+            notes: 'Imported via CSV'
+          })
+          .select('id')
+          .single()
 
-        // 2. Add Exercises
-        let orderIndex = 0
-        for (const row of rows) {
-          const exName = row['exercise']
+        if (routineError) throw routineError
+        const routineId = routineData.id
+
+        for (let i = 0; i < exercises.length; i++) {
+          const ex = exercises[i]
+          const exName = ex['exercise']
           if (!exName) continue
           
-          // Try to find exercise globally or for user
-          let { data: exData } = await supabase.from('exercises')
+          const { data: exData } = await supabase.from('exercises')
             .select('id').ilike('name', exName).limit(1)
-            
+
           let exerciseId = exData?.[0]?.id
           
-          // Create custom exercise if not found
           if (!exerciseId) {
-            const { data: newEx, error: exErr } = await supabase.from('exercises')
-              .insert({ user_id: user.id, name: exName })
-              .select('id').single()
+            const { data: newEx, error: newExError } = await supabase
+              .from('exercises')
+              .insert({
+                user_id: user.id,
+                name: exName,
+                primary_muscle: 'Full Body'
+              })
+              .select('id')
+              .single()
               
-            if (exErr) throw new Error(`Failed to create exercise '${exName}': ${exErr.message}`)
-            exerciseId = newEx.id
+            if (!newExError && newEx) {
+              exerciseId = newEx.id
+            } else {
+              continue
+            }
           }
 
-          // Insert into routine_exercises
-          const sets = parseInt(row['sets']) || 3
-          const reps = parseInt(row['reps']) || 10
-          const rest = parseInt(row['rest_seconds']) || 60
-          // "weight" column exists but our routine_exercises schema doesn't have it natively. 
-          // We will omit it or we could add it to notes. The schema does not support target weight in routines currently.
-          
+          const sets = parseInt(ex['sets']) || 3
+          const reps = parseInt(ex['reps']) || 10
+          const weight = parseFloat(ex['weight']) || null
+          const rest = parseInt(ex['rest_seconds']) || 60
+
           await supabase.from('routine_exercises').insert({
             routine_id: routineId,
             exercise_id: exerciseId,
-            order_index: orderIndex++,
+            order_index: i,
             target_sets: sets,
             target_reps: reps,
+            target_weight_kg: weight,
             rest_seconds: rest
           })
         }
       }
       
-      setImportStatus({ type: 'success', msg: "Successfully imported your routines!" })
+      setImportStatus({ 
+        type: 'success', 
+        msg: language === 'bn' ? "রুটিনসমূহ সফলভাবে ইম্পোর্ট করা হয়েছে!" : "Successfully imported your routines!" 
+      })
       setPreviewData(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
       
@@ -282,19 +327,23 @@ export function DataManagement() {
       <div className="bg-zinc-900/50 border border-white/10 rounded-3xl p-6 shadow-xl">
         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Download className="w-5 h-5 text-emerald-500" />
-          Export Data
+          {language === 'bn' ? 'ডেটা এক্সপোর্ট করুন' : 'Export Data'}
         </h3>
-        <p className="text-zinc-400 mb-6 text-sm">Download your workout history, calculated stats, and personal records in CSV format.</p>
+        <p className="text-zinc-400 mb-6 text-sm">
+          {language === 'bn'
+            ? 'সিএসভি ফরম্যাটে আপনার ওয়ার্কআউট ইতিহাস, পরিসংখ্যান এবং রেকর্ড ডাউনলোড করুন।'
+            : 'Download your workout history, calculated stats, and personal records in CSV format.'}
+        </p>
         
         <div className="flex flex-wrap gap-4">
           <Button onClick={() => handleExport('history')} disabled={isExporting} variant="outline" className="bg-zinc-800 border-white/10 hover:bg-zinc-700 text-white shadow-md">
-            <Database className="w-4 h-4 mr-2 text-blue-400" /> Export History
+            <Database className="w-4 h-4 mr-2 text-blue-400" /> {language === 'bn' ? 'হিস্ট্রি এক্সপোর্ট' : 'Export History'}
           </Button>
           <Button onClick={() => handleExport('stats')} disabled={isExporting} variant="outline" className="bg-zinc-800 border-white/10 hover:bg-zinc-700 text-white shadow-md">
-            <FileText className="w-4 h-4 mr-2 text-purple-400" /> Export Stats
+            <FileText className="w-4 h-4 mr-2 text-purple-400" /> {language === 'bn' ? 'পরিসংখ্যান এক্সপোর্ট' : 'Export Stats'}
           </Button>
           <Button onClick={() => handleExport('prs')} disabled={isExporting} variant="outline" className="bg-zinc-800 border-white/10 hover:bg-zinc-700 text-white shadow-md">
-            <Trophy className="w-4 h-4 mr-2 text-yellow-400" /> Export PRs
+            <Trophy className="w-4 h-4 mr-2 text-yellow-400" /> {language === 'bn' ? 'পিআর এক্সপোর্ট' : 'Export PRs'}
           </Button>
         </div>
       </div>
@@ -303,11 +352,13 @@ export function DataManagement() {
       <div className="bg-zinc-900/50 border border-white/10 rounded-3xl p-6 shadow-xl">
         <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Upload className="w-5 h-5 text-emerald-500" />
-          Import Routines
+          {language === 'bn' ? 'রুটিন ইম্পোর্ট করুন' : 'Import Routines'}
         </h3>
         <p className="text-zinc-400 mb-6 text-sm leading-relaxed">
-          Upload a CSV file to automatically generate workout routines. <br/>
-          Required columns: <code className="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-mono mt-1 inline-block">day, exercise, sets, reps, weight, rest_seconds</code>
+          {language === 'bn' 
+            ? 'স্বয়ংক্রিয়ভাবে ওয়ার্কআউট রুটিন তৈরি করতে একটি সিএসভি ফাইল আপলোড করুন।'
+            : 'Upload a CSV file to automatically generate workout routines.'} <br/>
+          {language === 'bn' ? 'প্রয়োজনীয় কলাম:' : 'Required columns:'} <code className="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-mono mt-1 inline-block">day, exercise, sets, reps, weight, rest_seconds</code>
         </p>
         
         <div className="flex flex-col gap-4">
