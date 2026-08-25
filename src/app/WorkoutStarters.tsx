@@ -35,9 +35,10 @@ export function StartRoutineButton({ routine }: { routine: Routine }) {
 
     localStorage.setItem(
       ACTIVE_WORKOUT_KEY,
-      JSON.stringify({ startTime: Date.now(), exercises })
+      JSON.stringify({ startTime: Date.now(), isRunning: true, exercises })
     )
     router.push('/workout/active')
+
   }
 
   return (

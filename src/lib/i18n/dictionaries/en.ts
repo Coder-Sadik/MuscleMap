@@ -67,7 +67,11 @@ export const en: TranslationDictionary = {
     noExercisesFound: 'No exercises found.',
     workoutSaved: 'Workout saved! Great session 💪',
     workoutSavedSub: 'Your progress has been logged.',
+    startTimer: 'Start',
+    pauseTimer: 'Pause',
+    resumeTimer: 'Resume',
   },
+
   muscles: {
     title: 'Exercise Library',
     subtitle: 'Explore movement mechanics and anatomy.',

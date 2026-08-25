@@ -67,7 +67,11 @@ export type TranslationDictionary = {
     noExercisesFound: string;
     workoutSaved: string;
     workoutSavedSub: string;
+    startTimer: string;
+    pauseTimer: string;
+    resumeTimer: string;
   };
+
   muscles: {
     title: string;
     subtitle: string;

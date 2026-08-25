@@ -100,11 +100,13 @@ export default function WorkoutHub() {
     localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({
       // eslint-disable-next-line react-hooks/purity
       startTime: Date.now(),
+      isRunning: true,
       exercises
     }))
 
     // Navigate to active workout
     router.push('/workout/active')
+
   }
 
   return (

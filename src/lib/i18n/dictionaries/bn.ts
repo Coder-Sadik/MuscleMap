@@ -67,7 +67,11 @@ export const bn: TranslationDictionary = {
     noExercisesFound: 'কোনো ব্যায়াম পাওয়া যায়নি।',
     workoutSaved: 'ওয়ার্কআউট সংরক্ষিত হয়েছে! চমৎকার সেশন 💪',
     workoutSavedSub: 'আপনার অগ্রগতি সংরক্ষিত হয়েছে।',
+    startTimer: 'শুরু',
+    pauseTimer: 'বিরতি',
+    resumeTimer: 'চালু',
   },
+
   muscles: {
     title: 'ব্যায়াম লাইব্রেরি',
     subtitle: 'ব্যায়ামের কৌশল ও শারীরস্থান অন্বেষণ করুন।',

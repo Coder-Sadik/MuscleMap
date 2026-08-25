@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { Check, Plus, Search, Dumbbell, Timer, Play, ChevronRight, ChevronLeft, SkipForward, Minus } from 'lucide-react'
+import { Check, Plus, Search, Dumbbell, Timer, Play, Pause, ChevronRight, ChevronLeft, SkipForward, Minus } from 'lucide-react'
 import { ACTIVE_WORKOUT_KEY } from '@/lib/constants'
 import { formatTime } from '@/lib/utils'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
@@ -79,6 +79,7 @@ export default function ActiveWorkout() {
 
   // State
   const [isLoaded, setIsLoaded] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
   const [startTime, setStartTime] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [exercises, setExercises] = useState<WorkoutExercise[]>([])
@@ -104,25 +105,30 @@ export default function ActiveWorkout() {
       const saved = localStorage.getItem(ACTIVE_WORKOUT_KEY)
       let initialExercises: WorkoutExercise[] = []
       let loadedStartTime: number | null = null
+      let loadedElapsed = 0
+      let loadedIsRunning = false
 
       if (saved) {
         try {
           const parsed = JSON.parse(saved)
           if (Array.isArray(parsed.exercises) && parsed.exercises.length > 0) {
             initialExercises = parsed.exercises
-            loadedStartTime = parsed.startTime || Date.now()
+            loadedStartTime = parsed.startTime || null
+            loadedElapsed = typeof parsed.elapsedSeconds === 'number' ? parsed.elapsedSeconds : 0
+            loadedIsRunning = !!parsed.isRunning
+            if (loadedIsRunning && loadedStartTime) {
+              const delta = Math.max(0, Math.floor((Date.now() - loadedStartTime) / 1000))
+              loadedElapsed += delta
+            }
           }
         } catch (e) {
           console.error('Failed to parse saved workout', e)
         }
       }
 
-      setStartTime(loadedStartTime)
-      if (loadedStartTime && initialExercises.length > 0) {
-        setElapsedSeconds(Math.max(0, Math.floor((Date.now() - loadedStartTime) / 1000)))
-      } else {
-        setElapsedSeconds(0)
-      }
+      setStartTime(loadedIsRunning ? Date.now() : loadedStartTime)
+      setElapsedSeconds(loadedElapsed)
+      setIsRunning(loadedIsRunning)
 
       // P1: limit to 20 most recent logs (was 100) — PRs are an approximation
       // and 20 logs is far more than enough for autofill; this cuts the payload ~80%.
@@ -208,26 +214,45 @@ export default function ActiveWorkout() {
 
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem(ACTIVE_WORKOUT_KEY, JSON.stringify({ startTime, exercises }))
+      localStorage.setItem(
+        ACTIVE_WORKOUT_KEY,
+        JSON.stringify({
+          startTime: isRunning ? Date.now() : startTime,
+          elapsedSeconds,
+          isRunning,
+          exercises,
+        })
+      )
     }
-  }, [exercises, startTime, isLoaded])
+  }, [exercises, startTime, elapsedSeconds, isRunning, isLoaded])
 
   // ── Workout Duration Timer ────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!isLoaded || !startTime || exercises.length === 0) {
+    if (!isLoaded || !isRunning) {
       if (timerInterval.current) clearInterval(timerInterval.current)
-      setElapsedSeconds(0)
       return
     }
-    setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)))
+
     timerInterval.current = setInterval(() => {
-      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)))
+      setElapsedSeconds(prev => prev + 1)
     }, 1000)
+
     return () => {
       if (timerInterval.current) clearInterval(timerInterval.current)
     }
-  }, [startTime, isLoaded, exercises.length])
+  }, [isRunning, isLoaded])
+
+  const toggleTimer = () => {
+    setIsRunning(prev => {
+      const next = !prev
+      if (next && !startTime) {
+        setStartTime(Date.now())
+      }
+      return next
+    })
+  }
+
 
 
   // ── Rest Timer ────────────────────────────────────────────────────────────
@@ -323,6 +348,11 @@ export default function ActiveWorkout() {
   }
 
   const completeSet = async (exIndex: number, setIndex: number) => {
+    if (!isRunning) {
+      setIsRunning(true)
+      if (!startTime) setStartTime(Date.now())
+    }
+
     const newExercises = exercises.map((ex, ei) => {
       if (ei !== exIndex) return ex
       return {
@@ -386,10 +416,7 @@ export default function ActiveWorkout() {
 
   const addExerciseToWorkout = (dbEx: DBExercise) => {
     setExercises(prev => {
-      if (prev.length === 0) {
-        setCurrentExerciseIndex(0)
-        setStartTime(currentStartTime => currentStartTime || Date.now())
-      }
+      if (prev.length === 0) setCurrentExerciseIndex(0)
       return [
         ...prev,
         {
@@ -461,10 +488,35 @@ export default function ActiveWorkout() {
 
       {/* Fixed Header */}
       <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-emerald-400 font-mono text-xl font-bold">
-          <Timer className="w-5 h-5" />
-          {formatTime(elapsedSeconds)}
-        </div>
+        <button
+          onClick={toggleTimer}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl font-mono text-sm font-bold transition-all active:scale-95 cursor-pointer ${
+            isRunning
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 shadow-[0_0_15px_-3px_rgba(16,185,129,0.3)]'
+              : elapsedSeconds > 0
+              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 animate-pulse'
+              : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.4)] font-sans'
+          }`}
+          aria-label={isRunning ? dict.workout.pauseTimer : elapsedSeconds > 0 ? dict.workout.resumeTimer : dict.workout.startTimer}
+        >
+          {isRunning ? (
+            <>
+              <Pause className="w-3.5 h-3.5 fill-emerald-400" />
+              <span>{formatTime(elapsedSeconds)}</span>
+            </>
+          ) : elapsedSeconds > 0 ? (
+            <>
+              <Play className="w-3.5 h-3.5 fill-amber-400" />
+              <span>{formatTime(elapsedSeconds)}</span>
+            </>
+          ) : (
+            <>
+              <Play className="w-3.5 h-3.5 fill-black" />
+              <span>{dict.workout.startTimer}</span>
+            </>
+          )}
+        </button>
+
 
         {/* Progress Dots */}
         <div className="flex gap-1.5 absolute left-1/2 -translate-x-1/2">
