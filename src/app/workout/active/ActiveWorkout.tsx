@@ -11,6 +11,8 @@ import { Check, Plus, Search, Dumbbell, Timer, Play, Pause, ChevronRight, Chevro
 import { ACTIVE_WORKOUT_KEY } from '@/lib/constants'
 import { formatTime } from '@/lib/utils'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
+import ConfirmModal from '@/components/ConfirmModal'
+
 
 // Types
 type SetData = {
@@ -98,6 +100,8 @@ export default function ActiveWorkout() {
   const [dbExercises, setDbExercises] = useState<DBExercise[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [isFinishing, setIsFinishing] = useState(false)
+  const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false)
+
 
   // ── Load from LocalStorage on mount & Fetch Previous Stats ───────────────
 
@@ -433,12 +437,15 @@ export default function ActiveWorkout() {
   }
 
   const discardWorkout = () => {
-    if (window.confirm(dict.workout.confirmDiscard)) {
-      localStorage.removeItem(ACTIVE_WORKOUT_KEY)
-      toast.info(language === 'bn' ? 'ওয়ার্কআউট বাতিল করা হয়েছে' : 'Workout discarded')
-      router.push('/workout')
-    }
+    setIsDiscardConfirmOpen(true)
   }
+
+  const handleConfirmDiscard = () => {
+    localStorage.removeItem(ACTIVE_WORKOUT_KEY)
+    toast.info(language === 'bn' ? 'ওয়ার্কআউট বাতিল করা হয়েছে' : 'Workout discarded')
+    router.push('/workout')
+  }
+
 
   const skipRest = () => setRestSecondsRemaining(null)
 
@@ -892,6 +899,24 @@ export default function ActiveWorkout() {
           </div>
         </div>
       )}
+
+      {/* Custom Discard Workout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isDiscardConfirmOpen}
+        onClose={() => setIsDiscardConfirmOpen(false)}
+        onConfirm={handleConfirmDiscard}
+        title={language === 'bn' ? 'ওয়ার্কআউট বাতিল করবেন?' : 'Discard Workout?'}
+        description={
+          language === 'bn'
+            ? 'আপনি কি নিশ্চিত যে এই ওয়ার্কআউট সেশনটি বাতিল করতে চান? আপনার সব আনসেভড ডেটা মুছে যাবে।'
+            : 'Are you sure you want to discard this workout? All logged sets and session progress will be lost.'
+        }
+        confirmText={dict.workout.discardWorkout}
+        cancelText={language === 'bn' ? 'চালু রাখুন' : 'Keep Workout'}
+        variant="danger"
+        icon="trash"
+      />
     </div>
   )
 }
+

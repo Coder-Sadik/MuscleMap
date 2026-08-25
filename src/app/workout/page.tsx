@@ -11,6 +11,8 @@ import { ACTIVE_WORKOUT_KEY } from '@/lib/constants'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
 import { toast } from 'sonner'
 import ExerciseProcedureModal, { ExerciseDetailData } from '@/components/ExerciseProcedureModal'
+import ConfirmModal from '@/components/ConfirmModal'
+
 
 type RoutineExercise = {
   exercise_id: string
@@ -45,6 +47,8 @@ export default function WorkoutHub() {
   const [isLoading, setIsLoading] = useState(true)
   const [expandedRoutineIds, setExpandedRoutineIds] = useState<Set<string>>(new Set())
   const [selectedExerciseForDetails, setSelectedExerciseForDetails] = useState<ExerciseDetailData | null>(null)
+  const [routineToDelete, setRoutineToDelete] = useState<{ id: string; name: string } | null>(null)
+
 
   const fetchRoutines = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -105,19 +109,26 @@ export default function WorkoutHub() {
     })
   }
 
-  const handleDeleteRoutine = async (routineId: string, e: React.MouseEvent) => {
+  const handleDeleteRoutine = (routine: Routine, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (window.confirm(dict.workout.deleteRoutine + '?')) {
-      setRoutines(prev => prev.filter(r => r.id !== routineId))
-      try {
-        await supabase.from('workout_routines').delete().eq('id', routineId)
-        toast.success(language === 'bn' ? 'রুটিন মুছে ফেলা হয়েছে' : 'Routine deleted')
-      } catch (err) {
-        console.error('Error deleting routine:', err)
-        fetchRoutines()
-      }
+    setRoutineToDelete({ id: routine.id, name: routine.name })
+  }
+
+  const handleConfirmDeleteRoutine = async () => {
+    if (!routineToDelete) return
+    const routineId = routineToDelete.id
+    setRoutines(prev => prev.filter(r => r.id !== routineId))
+    try {
+      await supabase.from('workout_routines').delete().eq('id', routineId)
+      toast.success(language === 'bn' ? 'রুটিন মুছে ফেলা হয়েছে' : 'Routine deleted')
+    } catch (err) {
+      console.error('Error deleting routine:', err)
+      fetchRoutines()
+    } finally {
+      setRoutineToDelete(null)
     }
   }
+
 
   const handleStartRoutine = (routine: Routine, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
@@ -248,12 +259,13 @@ export default function WorkoutHub() {
                         <Button 
                           variant="ghost"
                           size="icon"
-                          onClick={(e) => handleDeleteRoutine(routine.id, e)}
+                          onClick={(e) => handleDeleteRoutine(routine, e)}
                           className="text-zinc-600 hover:text-red-400 hover:bg-red-500/10 h-9 w-9 rounded-xl transition-colors cursor-pointer"
                           title={dict.workout.deleteRoutine}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
+
                         <Button 
                           onClick={(e) => handleStartRoutine(routine, e)}
                           className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-colors font-bold cursor-pointer"
@@ -369,7 +381,25 @@ export default function WorkoutHub() {
         exercise={selectedExerciseForDetails}
         onClose={() => setSelectedExerciseForDetails(null)}
       />
+
+      {/* Delete Routine Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(routineToDelete)}
+        onClose={() => setRoutineToDelete(null)}
+        onConfirm={handleConfirmDeleteRoutine}
+        title={language === 'bn' ? 'রুটিন মুছে ফেলবেন?' : 'Delete Routine?'}
+        description={
+          language === 'bn'
+            ? `আপনি কি নিশ্চিত যে "${routineToDelete?.name || ''}" রুটিনটি মুছে ফেলতে চান? এটি পুনরুদ্ধার করা যাবে না।`
+            : `Are you sure you want to delete "${routineToDelete?.name || ''}"? This custom routine will be permanently removed.`
+        }
+        confirmText={dict.workout.deleteRoutine}
+        cancelText={language === 'bn' ? 'বাতিল' : 'Cancel'}
+        variant="danger"
+        icon="trash"
+      />
     </div>
   )
 }
+
 
