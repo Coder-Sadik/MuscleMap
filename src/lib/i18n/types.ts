@@ -75,7 +75,13 @@ export type TranslationDictionary = {
     discardWorkout: string;
     deleteRoutine: string;
     confirmDiscard: string;
+    viewExerciseDetails: string;
+    exerciseDetails: string;
+    close: string;
+    tapToExpand: string;
+    tapToCollapse: string;
   };
+
 
 
   muscles: {

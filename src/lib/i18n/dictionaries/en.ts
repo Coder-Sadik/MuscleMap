@@ -75,7 +75,13 @@ export const en: TranslationDictionary = {
     discardWorkout: 'Discard',
     deleteRoutine: 'Delete',
     confirmDiscard: 'Are you sure you want to discard this workout?',
+    viewExerciseDetails: 'View Rules & Steps',
+    exerciseDetails: 'Exercise Procedure',
+    close: 'Close',
+    tapToExpand: 'Tap to view all exercises',
+    tapToCollapse: 'Show less',
   },
+
 
 
   muscles: {

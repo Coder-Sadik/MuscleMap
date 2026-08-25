@@ -75,7 +75,13 @@ export const bn: TranslationDictionary = {
     discardWorkout: 'বাতিল',
     deleteRoutine: 'মুছুন',
     confirmDiscard: 'আপনি কি নিশ্চিত যে এই ওয়ার্কআউটটি বাতিল করতে চান?',
+    viewExerciseDetails: 'নিয়ম ও ধাপ দেখুন',
+    exerciseDetails: 'ব্যায়ামের নিয়মাবলী',
+    close: 'বন্ধ করুন',
+    tapToExpand: 'সব ব্যায়াম দেখতে ট্যাপ করুন',
+    tapToCollapse: 'সংক্ষেপ করুন',
   },
+
 
 
   muscles: {
