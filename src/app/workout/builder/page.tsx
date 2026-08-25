@@ -220,20 +220,23 @@ export default function BuilderPage() {
       </main>
 
       {/* Sticky Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/80 to-transparent z-40 pb-safe">
-        <Button 
-          onClick={handleSave} 
-          disabled={isSaving}
-          className="w-full h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-lg shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] transition-all active:scale-95"
-        >
-          {isSaving ? (language === 'bn' ? 'সংরক্ষণ হচ্ছে...' : 'Saving...') : (
-            <>
-              <Save className="w-5 h-5 mr-2" />
-              {language === 'bn' ? 'রুটিন সংরক্ষণ করুন' : 'Save Routines'}
-            </>
-          )}
-        </Button>
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/90 to-transparent z-40 pb-safe">
+        <div className="max-w-[430px] mx-auto w-full">
+          <Button 
+            onClick={handleSave} 
+            disabled={isSaving}
+            className="w-full h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-lg shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] transition-all active:scale-95 cursor-pointer"
+          >
+            {isSaving ? (language === 'bn' ? 'সংরক্ষণ হচ্ছে...' : 'Saving...') : (
+              <>
+                <Save className="w-5 h-5 mr-2" />
+                {language === 'bn' ? 'রুটিন সংরক্ষণ করুন' : 'Save Routines'}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   )
 }
+

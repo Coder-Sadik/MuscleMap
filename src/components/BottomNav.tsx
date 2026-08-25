@@ -18,9 +18,12 @@ export default function BottomNav() {
     { href: "/profile", label: dict.nav.profile, icon: User },
   ];
 
-  // P4 fix: the active workout is a full-screen experience.
-  // Showing the bottom nav there wastes space and is visually confusing.
-  if (pathname === "/workout/active") return null;
+  // The active workout and routine builder are full-screen editing experiences with their own action buttons.
+  // Showing the bottom nav there causes UI overlap and takes away needed screen space.
+  if (pathname === "/workout/active" || pathname.startsWith("/workout/builder")) {
+    return null;
+  }
+
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-t border-border/50 pb-safe">
