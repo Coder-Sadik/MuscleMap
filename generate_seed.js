@@ -1375,5 +1375,8 @@ WHERE NOT EXISTS (
 );\n\n`;
 });
 
-fs.writeFileSync('seed.sql', sql);
-console.log('Successfully generated seed.sql with ' + exercises.length + ' exercises.');
+const path = require('path');
+const outPath = path.join(__dirname, 'supabase', 'seed.sql');
+fs.writeFileSync(outPath, sql);
+console.log('Successfully generated ' + outPath + ' with ' + exercises.length + ' exercises.');
+

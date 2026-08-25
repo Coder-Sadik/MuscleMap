@@ -104,8 +104,12 @@ MuscleMap/
 │       │   ├── LanguageContext.tsx # Context provider & useLanguage() hook
 │       │   └── dictionaries/   # en.ts & bn.ts
 │       └── supabase/           # Browser & server Supabase client instances
+├── supabase/                   # Organized database schema, migrations & seed SQL scripts
+│   ├── schema.sql              # Core PostgreSQL database tables & RLS policies
+│   ├── seed.sql                # 77 scientifically backed predefined exercises
+│   ├── alter_schema.sql        # Table extensions and schema migrations
+│   └── fix_linter.sql          # Performance & RLS security policy optimizations
 ├── generate_seed.js            # Seed generator script (77 exercises)
-├── seed.sql                    # SQL seed script with full exercise library
 └── generate_pwa_icons.js       # PWA vector-to-PNG icon generation script
 ```
 
@@ -132,10 +136,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 ### 4. Database Setup & Seeding
-Execute the SQL schema in your Supabase SQL Editor and run `seed.sql` to populate all **77 predefined exercises**:
+Execute `supabase/schema.sql` in your Supabase SQL Editor, followed by `supabase/seed.sql` to populate all **77 predefined exercises**:
 ```bash
-# seed.sql contains idempotent queries (WHERE NOT EXISTS) to populate all exercises safely
+# supabase/seed.sql contains idempotent queries (WHERE NOT EXISTS) to populate all exercises safely
 ```
+
 
 ### 5. Run Development Server
 ```bash
