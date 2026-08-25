@@ -9,8 +9,6 @@
 ![Supabase](https://img.shields.io/badge/Supabase-181818?style=for-the-badge&logo=supabase&logoColor=3ECF8E)
 ![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)
 ![i18n](https://img.shields.io/badge/Language-English%20%7C%20বাংলা-10B981?style=for-the-badge)
-[![Live Demo](https://img.shields.io/badge/Live_Demo-musclemap--bd.vercel.app-000?style=for-the-badge&logo=vercel&logoColor=white)](https://musclemap-bd.vercel.app)
-
 
 <br />
 
