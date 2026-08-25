@@ -79,7 +79,7 @@ export default function ActiveWorkout() {
 
   // State
   const [isLoaded, setIsLoaded] = useState(false)
-  const [startTime, setStartTime] = useState<number>(() => Date.now())
+  const [startTime, setStartTime] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [exercises, setExercises] = useState<WorkoutExercise[]>([])
 
@@ -103,19 +103,26 @@ export default function ActiveWorkout() {
     const initializeWorkout = async () => {
       const saved = localStorage.getItem(ACTIVE_WORKOUT_KEY)
       let initialExercises: WorkoutExercise[] = []
-      let loadedStartTime = Date.now()
+      let loadedStartTime: number | null = null
 
       if (saved) {
         try {
           const parsed = JSON.parse(saved)
-          loadedStartTime = parsed.startTime || Date.now()
-          initialExercises = parsed.exercises || []
+          if (Array.isArray(parsed.exercises) && parsed.exercises.length > 0) {
+            initialExercises = parsed.exercises
+            loadedStartTime = parsed.startTime || Date.now()
+          }
         } catch (e) {
           console.error('Failed to parse saved workout', e)
         }
       }
 
       setStartTime(loadedStartTime)
+      if (loadedStartTime && initialExercises.length > 0) {
+        setElapsedSeconds(Math.max(0, Math.floor((Date.now() - loadedStartTime) / 1000)))
+      } else {
+        setElapsedSeconds(0)
+      }
 
       // P1: limit to 20 most recent logs (was 100) — PRs are an approximation
       // and 20 logs is far more than enough for autofill; this cuts the payload ~80%.
@@ -208,14 +215,20 @@ export default function ActiveWorkout() {
   // ── Workout Duration Timer ────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded || !startTime || exercises.length === 0) {
+      if (timerInterval.current) clearInterval(timerInterval.current)
+      setElapsedSeconds(0)
+      return
+    }
+    setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)))
     timerInterval.current = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000))
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startTime) / 1000)))
     }, 1000)
     return () => {
       if (timerInterval.current) clearInterval(timerInterval.current)
     }
-  }, [startTime, isLoaded])
+  }, [startTime, isLoaded, exercises.length])
+
 
   // ── Rest Timer ────────────────────────────────────────────────────────────
   // B3 fix: the effect is keyed to `restTimerTrigger`, a counter that only
@@ -245,14 +258,15 @@ export default function ActiveWorkout() {
 
   const saveToSupabase = useCallback(async (exercisesState: WorkoutExercise[]) => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user || exercisesState.length === 0) return
 
+    const effectiveStartTime = startTime || Date.now()
     if (!activeLogIdRef.current) {
       const { data, error } = await supabase
         .from('workout_logs')
         .insert({
           user_id: user.id,
-          start_time: new Date(startTime).toISOString(),
+          start_time: new Date(effectiveStartTime).toISOString(),
           exercises_data: exercisesState,
         })
         .select('id')
@@ -372,7 +386,11 @@ export default function ActiveWorkout() {
 
   const addExerciseToWorkout = (dbEx: DBExercise) => {
     setExercises(prev => {
-      const updated = [
+      if (prev.length === 0) {
+        setCurrentExerciseIndex(0)
+        setStartTime(currentStartTime => currentStartTime || Date.now())
+      }
+      return [
         ...prev,
         {
           exercise_id: dbEx.id,
@@ -380,9 +398,6 @@ export default function ActiveWorkout() {
           sets: [{ id: window.crypto.randomUUID(), weight: '20', reps: '10', completed: false }],
         },
       ]
-      // B4 fix: read prev.length (the actual current length) to decide index
-      if (prev.length === 0) setCurrentExerciseIndex(0)
-      return updated
     })
     setIsSelecting(false)
     setSearchQuery('')
@@ -404,6 +419,7 @@ export default function ActiveWorkout() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
+        const effectiveStartTime = startTime || Date.now()
         if (activeLogIdRef.current) {
           await supabase
             .from('workout_logs')
@@ -412,7 +428,7 @@ export default function ActiveWorkout() {
         } else {
           await supabase.from('workout_logs').insert({
             user_id: user.id,
-            start_time: new Date(startTime).toISOString(),
+            start_time: new Date(effectiveStartTime).toISOString(),
             end_time: new Date().toISOString(),
             exercises_data: exercises,
           })
@@ -420,6 +436,7 @@ export default function ActiveWorkout() {
       }
 
       localStorage.removeItem(ACTIVE_WORKOUT_KEY)
+
       // B15 fix: show success toast before navigating away
       toast.success(dict.workout.workoutSaved)
       router.push('/')
