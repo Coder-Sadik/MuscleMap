@@ -70,7 +70,13 @@ export const en: TranslationDictionary = {
     startTimer: 'Start',
     pauseTimer: 'Pause',
     resumeTimer: 'Resume',
+    removeExercise: 'Remove Exercise',
+    removeSet: 'Remove Set',
+    discardWorkout: 'Discard',
+    deleteRoutine: 'Delete',
+    confirmDiscard: 'Are you sure you want to discard this workout?',
   },
+
 
   muscles: {
     title: 'Exercise Library',

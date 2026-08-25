@@ -70,7 +70,13 @@ export const bn: TranslationDictionary = {
     startTimer: 'শুরু',
     pauseTimer: 'বিরতি',
     resumeTimer: 'চালু',
+    removeExercise: 'ব্যায়াম মুছুন',
+    removeSet: 'সেট মুছুন',
+    discardWorkout: 'বাতিল',
+    deleteRoutine: 'মুছুন',
+    confirmDiscard: 'আপনি কি নিশ্চিত যে এই ওয়ার্কআউটটি বাতিল করতে চান?',
   },
+
 
   muscles: {
     title: 'ব্যায়াম লাইব্রেরি',

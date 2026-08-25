@@ -70,7 +70,13 @@ export type TranslationDictionary = {
     startTimer: string;
     pauseTimer: string;
     resumeTimer: string;
+    removeExercise: string;
+    removeSet: string;
+    discardWorkout: string;
+    deleteRoutine: string;
+    confirmDiscard: string;
   };
+
 
   muscles: {
     title: string;

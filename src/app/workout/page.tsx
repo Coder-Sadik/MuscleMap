@@ -3,12 +3,13 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, ClipboardList, Play, Dumbbell } from 'lucide-react'
+import { Plus, ClipboardList, Play, Dumbbell, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { ACTIVE_WORKOUT_KEY } from '@/lib/constants'
 import { useLanguage } from '@/lib/i18n/LanguageContext'
+import { toast } from 'sonner'
 
 type Routine = {
   id: string
@@ -31,7 +32,7 @@ export default function WorkoutHub() {
   // B11 fix: stabilise supabase client with useRef
   const supabase = useRef(createClient()).current
   const router = useRouter()
-  const { dict } = useLanguage()
+  const { dict, language } = useLanguage()
   const [routines, setRoutines] = useState<Routine[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -61,10 +62,10 @@ export default function WorkoutHub() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (data) {
-      setRoutines(data as unknown as Routine[])
+    if (error) {
+      console.error('Error fetching routines:', error)
     } else {
-      console.error(error)
+      setRoutines(data as unknown as Routine[])
     }
     setIsLoading(false)
   }, [supabase])
@@ -73,25 +74,33 @@ export default function WorkoutHub() {
     fetchRoutines()
   }, [fetchRoutines])
 
+  const handleDeleteRoutine = async (routineId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (window.confirm(dict.workout.deleteRoutine + '?')) {
+      setRoutines(prev => prev.filter(r => r.id !== routineId))
+      try {
+        await supabase.from('workout_routines').delete().eq('id', routineId)
+        toast.success(language === 'bn' ? 'রুটিন মুছে ফেলা হয়েছে' : 'Routine deleted')
+      } catch (err) {
+        console.error('Error deleting routine:', err)
+        fetchRoutines()
+      }
+    }
+  }
+
   const handleStartRoutine = (routine: Routine) => {
     // Map routine_exercises to the format expected by ActiveWorkout
     const exercises = routine.routine_exercises.map(re => {
-      const sets = []
-      const targetWeight = re.target_weight_kg ? re.target_weight_kg.toString() : '20'
-      const targetReps = re.target_reps ? re.target_reps.toString() : '10'
-
-      for (let i = 0; i < (re.target_sets || 3); i++) {
-        sets.push({
-          id: window.crypto.randomUUID(),
-          weight: targetWeight,
-          reps: targetReps,
-          completed: false
-        })
-      }
+      const sets = Array.from({ length: re.target_sets || 3 }).map(() => ({
+        id: window.crypto.randomUUID(),
+        weight: re.target_weight_kg ? re.target_weight_kg.toString() : '',
+        reps: re.target_reps ? re.target_reps.toString() : '',
+        completed: false
+      }))
 
       return {
         exercise_id: re.exercise_id,
-        name: re.exercises?.name || 'Unknown',
+        name: re.exercises?.name || 'Unknown Exercise',
         sets
       }
     })
@@ -106,7 +115,6 @@ export default function WorkoutHub() {
 
     // Navigate to active workout
     router.push('/workout/active')
-
   }
 
   return (
@@ -161,14 +169,26 @@ export default function WorkoutHub() {
                         {routine.routine_exercises.length} {dict.workout.exercisesCount}
                       </p>
                     </div>
-                    <Button 
-                      onClick={() => handleStartRoutine(routine)}
-                      className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-colors font-bold"
-                    >
-                      <Play className="w-4 h-4 mr-2" />
-                      {dict.home.startWorkout}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleDeleteRoutine(routine.id, e)}
+                        className="text-zinc-600 hover:text-red-400 hover:bg-red-500/10 h-9 w-9 rounded-xl transition-colors"
+                        title={dict.workout.deleteRoutine}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        onClick={() => handleStartRoutine(routine)}
+                        className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-colors font-bold"
+                      >
+                        <Play className="w-4 h-4 mr-2" />
+                        {dict.home.startWorkout}
+                      </Button>
+                    </div>
                   </div>
+
                   
                   {/* Preview exercises */}
                   <div className="flex flex-wrap gap-2">
