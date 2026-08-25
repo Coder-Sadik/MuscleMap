@@ -2,10 +2,11 @@ import { MetadataRoute } from 'next'
  
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'FitTrack Pro',
-    short_name: 'FitTrack',
-    description: 'Your premium fitness and workout tracker',
+    name: 'MuscleMap',
+    short_name: 'MuscleMap',
+    description: 'Your ultimate fitness, workout & muscle companion',
     start_url: '/',
+
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#000000',

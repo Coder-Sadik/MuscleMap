@@ -1,4 +1,4 @@
-# 🏋️ MuscleMap (FitTrack Pro)
+# 🏋️ MuscleMap
 
 <div align="center">
 
@@ -75,39 +75,38 @@
 
 ```text
 MuscleMap/
-└── fit-track-pro/
-    ├── public/                     # High-DPI PWA icons & static assets
-    │   ├── apple-touch-icon.png
-    │   ├── icon-192x192.png
-    │   └── icon-512x512.png
-    ├── src/
-    │   ├── app/
-    │   │   ├── layout.tsx          # Root layout, fonts (Outfit + Hind Siliguri), Toast provider
-    │   │   ├── manifest.ts         # PWA Web App Manifest configuration
-    │   │   ├── page.tsx            # Home dashboard (Server component)
-    │   │   ├── HomeDashboardView.tsx # Localized Home client view
-    │   │   ├── muscles/            # Exercise library & muscle detail routes
-    │   │   │   ├── page.tsx
-    │   │   │   ├── ExerciseLibrary.tsx
-    │   │   │   └── [id]/           # Exercise detail with form cues & safety tips
-    │   │   ├── workout/            # Workout hub & builder
-    │   │   │   ├── page.tsx
-    │   │   │   ├── active/         # Active gym tracker with live timers
-    │   │   │   └── builder/        # Custom split & routine builder
-    │   │   ├── progress/           # Charts, PR tracking, and analytics dashboard
-    │   │   └── profile/            # Body metrics, CSV data management, language switcher
-    │   ├── components/             # Reusable UI components (BottomNav, LanguageToggle, etc.)
-    │   └── lib/
-    │       ├── constants.ts        # Shared constants & storage keys
-    │       ├── utils.ts            # Date formatting, streaks, time computations
-    │       ├── i18n/               # Translation engine & dictionaries
-    │       │   ├── types.ts        # Strict dictionary schema types
-    │       │   ├── LanguageContext.tsx # Context provider & useLanguage() hook
-    │       │   └── dictionaries/   # en.ts & bn.ts
-    │       └── supabase/           # Browser & server Supabase client instances
-    ├── generate_seed.js            # Seed generator script (77 exercises)
-    ├── seed.sql                    # SQL seed script with full exercise library
-    └── generate_pwa_icons.js       # PWA vector-to-PNG icon generation script
+├── public/                     # High-DPI PWA icons & static assets
+│   ├── apple-touch-icon.png
+│   ├── icon-192x192.png
+│   └── icon-512x512.png
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx          # Root layout, fonts (Outfit + Hind Siliguri), Toast provider
+│   │   ├── manifest.ts         # PWA Web App Manifest configuration
+│   │   ├── page.tsx            # Home dashboard (Server component)
+│   │   ├── HomeDashboardView.tsx # Localized Home client view
+│   │   ├── muscles/            # Exercise library & muscle detail routes
+│   │   │   ├── page.tsx
+│   │   │   ├── ExerciseLibrary.tsx
+│   │   │   └── [id]/           # Exercise detail with form cues & safety tips
+│   │   ├── workout/            # Workout hub & builder
+│   │   │   ├── page.tsx
+│   │   │   ├── active/         # Active gym tracker with live timers
+│   │   │   └── builder/        # Custom split & routine builder
+│   │   ├── progress/           # Charts, PR tracking, and analytics dashboard
+│   │   └── profile/            # Body metrics, CSV data management, language switcher
+│   ├── components/             # Reusable UI components (BottomNav, LanguageToggle, etc.)
+│   └── lib/
+│       ├── constants.ts        # Shared constants & storage keys
+│       ├── utils.ts            # Date formatting, streaks, time computations
+│       ├── i18n/               # Translation engine & dictionaries
+│       │   ├── types.ts        # Strict dictionary schema types
+│       │   ├── LanguageContext.tsx # Context provider & useLanguage() hook
+│       │   └── dictionaries/   # en.ts & bn.ts
+│       └── supabase/           # Browser & server Supabase client instances
+├── generate_seed.js            # Seed generator script (77 exercises)
+├── seed.sql                    # SQL seed script with full exercise library
+└── generate_pwa_icons.js       # PWA vector-to-PNG icon generation script
 ```
 
 ---
@@ -117,7 +116,7 @@ MuscleMap/
 ### 1. Clone the repository
 ```bash
 git clone https://github.com/Coder-Sadik/MuscleMap.git
-cd MuscleMap/fit-track-pro
+cd MuscleMap
 ```
 
 ### 2. Install dependencies
@@ -126,7 +125,7 @@ npm install
 ```
 
 ### 3. Configure Environment Variables
-Create a `.env.local` file in `fit-track-pro/` with your Supabase project credentials:
+Create a `.env.local` file in the project root with your Supabase project credentials:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
@@ -154,7 +153,8 @@ npm run start
 
 ## 📱 Mobile Installation (PWA)
 
-FitTrack Pro can be installed on any modern smartphone as a standalone web application:
+MuscleMap can be installed on any modern smartphone as a standalone web application:
+
 
 ### 🍎 iOS (iPhone / iPad)
 1. Open the app in **Safari**.

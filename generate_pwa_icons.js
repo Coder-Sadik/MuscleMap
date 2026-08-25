@@ -4,8 +4,9 @@ const path = require('path');
 
 const publicDir = path.join(__dirname, 'public');
 
-// Vector SVG for FitTrack Pro icon: Dark obsidian rounded shield with glowing emerald dumbbell
+// Vector SVG for MuscleMap icon: Dark obsidian rounded shield with glowing emerald dumbbell
 function createSvg(size) {
+
   return `
 <svg width="${size}" height="${size}" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>

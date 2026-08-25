@@ -17,8 +17,8 @@ const hindSiliguri = Hind_Siliguri({
 });
 
 export const metadata: Metadata = {
-  title: "FitTrack Pro",
-  description: "Your premium fitness companion",
+  title: "MuscleMap",
+  description: "Your ultimate fitness, workout & muscle companion",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -32,9 +32,10 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "FitTrack Pro",
+    title: "MuscleMap",
   },
 };
+
 
 export const viewport = {
   themeColor: "#000000",
