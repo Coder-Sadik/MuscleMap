@@ -63,7 +63,6 @@ export async function signup(formData: FormData) {
   })
 
   if (error) {
-    // If the user was already created previously but failed or is unconfirmed
     const msg = error.message.toLowerCase()
     if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
       const { error: resendErr } = await supabase.auth.resend({
@@ -76,9 +75,26 @@ export async function signup(formData: FormData) {
       if (!resendErr) {
         redirect(
           `/login?message=${encodeURIComponent(
-            'Confirmation email resent! Please check your inbox and spam folder.'
+            'Account already registered. A new confirmation link was sent to your email!'
           )}&unconfirmedEmail=${encodeURIComponent(email)}`
         )
+      } else {
+        const resendMsg = resendErr.message.toLowerCase()
+        if (resendMsg.includes('already confirmed') || resendMsg.includes('user already confirmed')) {
+          redirect(
+            `/login?message=${encodeURIComponent(
+              'This account is already verified! Please sign in with your password.'
+            )}&unconfirmedEmail=${encodeURIComponent(email)}`
+          )
+        }
+        if (resendMsg.includes('security') || resendMsg.includes('rate limit') || resendMsg.includes('60 seconds')) {
+          redirect(
+            `/login?error=${encodeURIComponent(
+              'Please wait 60 seconds before requesting another confirmation email (Supabase rate limit).'
+            )}&unconfirmedEmail=${encodeURIComponent(email)}`
+          )
+        }
+        redirect(`/login?error=${encodeURIComponent(resendErr.message)}&unconfirmedEmail=${encodeURIComponent(email)}`)
       }
     }
     redirect(`/signup?error=${encodeURIComponent(error.message)}`)
@@ -86,13 +102,30 @@ export async function signup(formData: FormData) {
 
   // If Supabase returns fake user with empty identities (email enumeration protection)
   if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-    await supabase.auth.resend({
+    const { error: resendErr } = await supabase.auth.resend({
       type: 'signup',
       email,
       options: {
         emailRedirectTo: `${siteUrl}/auth/callback`,
       },
     })
+    if (resendErr) {
+      const resendMsg = resendErr.message.toLowerCase()
+      if (resendMsg.includes('already confirmed')) {
+        redirect(
+          `/login?message=${encodeURIComponent(
+            'This account is already verified! Please sign in.'
+          )}&unconfirmedEmail=${encodeURIComponent(email)}`
+        )
+      }
+      if (resendMsg.includes('security') || resendMsg.includes('rate limit') || resendMsg.includes('60 seconds')) {
+        redirect(
+          `/login?error=${encodeURIComponent(
+            'Email already requested recently. Please wait 60 seconds or check your spam folder.'
+          )}&unconfirmedEmail=${encodeURIComponent(email)}`
+        )
+      }
+    }
     redirect(
       `/login?message=${encodeURIComponent(
         'Confirmation email sent! Please check your inbox and spam folder.'
@@ -125,6 +158,21 @@ export async function resendConfirmation(formData: FormData) {
   })
 
   if (error) {
+    const msg = error.message.toLowerCase()
+    if (msg.includes('already confirmed') || msg.includes('user already confirmed')) {
+      redirect(
+        `/login?message=${encodeURIComponent(
+          'This email is already confirmed! Please sign in with your password.'
+        )}&unconfirmedEmail=${encodeURIComponent(email)}`
+      )
+    }
+    if (msg.includes('security') || msg.includes('rate limit') || msg.includes('60 seconds') || msg.includes('over_email_send_rate_limit')) {
+      redirect(
+        `/login?error=${encodeURIComponent(
+          'Email rate limit reached. Please wait 60 seconds before requesting another email.'
+        )}&unconfirmedEmail=${encodeURIComponent(email)}`
+      )
+    }
     redirect(`/login?error=${encodeURIComponent(error.message)}&unconfirmedEmail=${encodeURIComponent(email)}`)
   }
 
@@ -134,6 +182,7 @@ export async function resendConfirmation(formData: FormData) {
     )}&unconfirmedEmail=${encodeURIComponent(email)}`
   )
 }
+
 
 export async function signout() {
   const supabase = await createClient()
