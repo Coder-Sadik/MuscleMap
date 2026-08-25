@@ -4,20 +4,39 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
+function getURL() {
+  let url =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    process.env.NEXT_PUBLIC_VERCEL_URL ??
+    'http://localhost:3000'
+  url = url.includes('http') ? url : `https://${url}`
+  return url.replace(/\/$/, '')
+}
+
 export async function login(formData: FormData) {
   const supabase = await createClient()
 
-  // type-casting here for convenience
-  // in practice, you should validate your inputs
-  const data = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
+  const email = (formData.get('email') as string)?.trim()
+  const password = formData.get('password') as string
+
+  if (!email || !password) {
+    redirect('/login?error=Please enter both email and password')
   }
 
-  const { error } = await supabase.auth.signInWithPassword(data)
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
 
   if (error) {
-    redirect('/login?error=Could not authenticate user')
+    if (error.message.toLowerCase().includes('email not confirmed')) {
+      redirect(
+        `/login?error=${encodeURIComponent(
+          'Email not confirmed yet. Check your inbox or click "Resend Confirmation" below.'
+        )}&unconfirmedEmail=${encodeURIComponent(email)}`
+      )
+    }
+    redirect(`/login?error=${encodeURIComponent(error.message)}`)
   }
 
   revalidatePath('/', 'layout')
@@ -27,19 +46,93 @@ export async function login(formData: FormData) {
 export async function signup(formData: FormData) {
   const supabase = await createClient()
 
-  const data = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
+  const email = (formData.get('email') as string)?.trim()
+  const password = formData.get('password') as string
+
+  if (!email || !password) {
+    redirect('/signup?error=Please provide both email and password')
   }
 
-  const { error } = await supabase.auth.signUp(data)
+  const siteUrl = getURL()
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${siteUrl}/auth/callback`,
+    },
+  })
 
   if (error) {
-    redirect('/signup?error=Could not create user')
+    // If the user was already created previously but failed or is unconfirmed
+    const msg = error.message.toLowerCase()
+    if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
+      const { error: resendErr } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: {
+          emailRedirectTo: `${siteUrl}/auth/callback`,
+        },
+      })
+      if (!resendErr) {
+        redirect(
+          `/login?message=${encodeURIComponent(
+            'Confirmation email resent! Please check your inbox and spam folder.'
+          )}&unconfirmedEmail=${encodeURIComponent(email)}`
+        )
+      }
+    }
+    redirect(`/signup?error=${encodeURIComponent(error.message)}`)
   }
 
-  // Supabase defaults to requiring email verification.
-  redirect('/login?message=Check email to continue sign in process')
+  // If Supabase returns fake user with empty identities (email enumeration protection)
+  if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${siteUrl}/auth/callback`,
+      },
+    })
+    redirect(
+      `/login?message=${encodeURIComponent(
+        'Confirmation email sent! Please check your inbox and spam folder.'
+      )}&unconfirmedEmail=${encodeURIComponent(email)}`
+    )
+  }
+
+  redirect(
+    `/login?message=${encodeURIComponent(
+      'Account created! Check your email to confirm your account and sign in.'
+    )}&unconfirmedEmail=${encodeURIComponent(email)}`
+  )
+}
+
+export async function resendConfirmation(formData: FormData) {
+  const supabase = await createClient()
+  const email = (formData.get('email') as string)?.trim()
+
+  if (!email) {
+    redirect('/login?error=Please enter your email address to resend confirmation')
+  }
+
+  const siteUrl = getURL()
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo: `${siteUrl}/auth/callback`,
+    },
+  })
+
+  if (error) {
+    redirect(`/login?error=${encodeURIComponent(error.message)}&unconfirmedEmail=${encodeURIComponent(email)}`)
+  }
+
+  redirect(
+    `/login?message=${encodeURIComponent(
+      'New confirmation email sent! Check your inbox or spam folder.'
+    )}&unconfirmedEmail=${encodeURIComponent(email)}`
+  )
 }
 
 export async function signout() {
@@ -51,28 +144,38 @@ export async function signout() {
 
 export async function forgotPassword(formData: FormData) {
   const supabase = await createClient()
-  const email = formData.get('email') as string
+  const email = (formData.get('email') as string)?.trim()
 
+  if (!email) {
+    redirect('/forgot-password?error=Please enter your email address')
+  }
+
+  const siteUrl = getURL()
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback?next=/reset-password`,
+    redirectTo: `${siteUrl}/auth/callback?next=/reset-password`,
   })
 
   if (error) {
-    redirect('/forgot-password?error=Could not send reset email')
+    redirect(`/forgot-password?error=${encodeURIComponent(error.message)}`)
   }
-  
-  redirect('/forgot-password?message=Check your email for the reset link')
+
+  redirect('/forgot-password?message=' + encodeURIComponent('Check your email for the password reset link'))
 }
 
 export async function resetPassword(formData: FormData) {
   const supabase = await createClient()
   const password = formData.get('password') as string
 
+  if (!password) {
+    redirect('/reset-password?error=Please provide a new password')
+  }
+
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) {
-    redirect('/reset-password?error=Could not reset password')
+    redirect(`/reset-password?error=${encodeURIComponent(error.message)}`)
   }
 
-  redirect('/login?message=Password updated successfully')
+  redirect('/login?message=' + encodeURIComponent('Password updated successfully! Please sign in with your new password.'))
 }
+

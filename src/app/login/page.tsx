@@ -1,16 +1,16 @@
 import Link from 'next/link'
-import { login } from './actions'
+import { login, resendConfirmation } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dumbbell, ArrowRight } from 'lucide-react'
+import { Dumbbell, ArrowRight, Mail } from 'lucide-react'
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ message?: string; error?: string }>
+  searchParams: Promise<{ message?: string; error?: string; unconfirmedEmail?: string }>
 }) {
-  const { message, error } = await searchParams;
+  const { message, error, unconfirmedEmail } = await searchParams;
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-screen overflow-hidden bg-black selection:bg-primary selection:text-primary-foreground">
@@ -57,6 +57,7 @@ export default async function LoginPage({
                 id="email"
                 name="email"
                 type="email"
+                defaultValue={unconfirmedEmail || ''}
                 placeholder="m@example.com"
                 required
                 className="h-12 px-4 rounded-xl bg-black/50 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:border-emerald-500 transition-all"
@@ -87,8 +88,21 @@ export default async function LoginPage({
               Sign In
               <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
+
+            <div className="pt-3 border-t border-white/5 flex items-center justify-between">
+              <span className="text-xs text-zinc-500">Need confirmation email?</span>
+              <button
+                formAction={resendConfirmation}
+                type="submit"
+                className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                Resend Link
+              </button>
+            </div>
           </form>
         </div>
+
 
         {/* Footer */}
         <div className="mt-8 text-center">
