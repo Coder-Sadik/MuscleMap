@@ -214,17 +214,37 @@ export async function forgotPassword(formData: FormData) {
 export async function resetPassword(formData: FormData) {
   const supabase = await createClient()
   const password = formData.get('password') as string
+  const confirmPassword = formData.get('confirm_password') as string
 
   if (!password) {
-    redirect('/reset-password?error=Please provide a new password')
+    redirect('/reset-password?error=' + encodeURIComponent('Please provide a new password'))
+  }
+
+  if (password.length < 6) {
+    redirect('/reset-password?error=' + encodeURIComponent('Password must be at least 6 characters long'))
+  }
+
+  if (confirmPassword && password !== confirmPassword) {
+    redirect('/reset-password?error=' + encodeURIComponent('Passwords do not match. Please ensure both fields are identical.'))
   }
 
   const { error } = await supabase.auth.updateUser({ password })
 
   if (error) {
+    const msg = error.message.toLowerCase()
+    if (msg.includes('auth session missing') || msg.includes('session') || msg.includes('jwt')) {
+      redirect(
+        `/reset-password?error=${encodeURIComponent(
+          'Password reset link is invalid or has expired. Please request a new link.'
+        )}`
+      )
+    }
     redirect(`/reset-password?error=${encodeURIComponent(error.message)}`)
   }
 
+  await supabase.auth.signOut()
+
   redirect('/login?message=' + encodeURIComponent('Password updated successfully! Please sign in with your new password.'))
 }
+
 
