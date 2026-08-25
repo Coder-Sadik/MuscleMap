@@ -2,8 +2,10 @@ import Link from 'next/link'
 import { signup, resendConfirmation } from '@/app/login/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/PasswordInput'
 import { Label } from '@/components/ui/label'
 import { Dumbbell, ArrowRight, Mail } from 'lucide-react'
+
 
 export default async function SignupPage({
   searchParams,
@@ -66,14 +68,14 @@ export default async function SignupPage({
             
             <div className="space-y-2.5">
               <Label htmlFor="password" className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Password</Label>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 className="h-12 px-4 rounded-xl bg-black/50 border-white/10 text-white focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:border-emerald-500 transition-all"
               />
             </div>
+
 
             <Button 
               formAction={signup} 

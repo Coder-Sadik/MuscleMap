@@ -2,8 +2,10 @@ import Link from 'next/link'
 import { login, resendConfirmation } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/PasswordInput'
 import { Label } from '@/components/ui/label'
 import { Dumbbell, ArrowRight, Mail } from 'lucide-react'
+
 
 export default async function LoginPage({
   searchParams,
@@ -71,14 +73,14 @@ export default async function LoginPage({
                   Forgot?
                 </Link>
               </div>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 className="h-12 px-4 rounded-xl bg-black/50 border-white/10 text-white focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:border-emerald-500 transition-all"
               />
             </div>
+
 
             <Button 
               formAction={login} 

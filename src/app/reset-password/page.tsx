@@ -1,8 +1,9 @@
 import { resetPassword } from '@/app/login/actions'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/PasswordInput'
 import { Label } from '@/components/ui/label'
 import { Dumbbell, ArrowRight } from 'lucide-react'
+
 
 export default async function ResetPasswordPage({
   searchParams,
@@ -52,14 +53,14 @@ export default async function ResetPasswordPage({
 
             <div className="space-y-2.5">
               <Label htmlFor="password" className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">New Password</Label>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 required
                 className="h-12 px-4 rounded-xl bg-black/50 border-white/10 text-white focus-visible:ring-1 focus-visible:ring-emerald-500 focus-visible:border-emerald-500 transition-all"
               />
             </div>
+
 
             <Button 
               formAction={resetPassword} 
