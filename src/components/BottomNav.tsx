@@ -18,9 +18,11 @@ export default function BottomNav() {
     { href: "/profile", label: dict.nav.profile, icon: User },
   ];
 
-  // The active workout and routine builder are full-screen editing experiences with their own action buttons.
-  // Showing the bottom nav there causes UI overlap and takes away needed screen space.
-  if (pathname === "/workout/active" || pathname.startsWith("/workout/builder")) {
+  // Hide bottom nav on active workouts, routine builder, and authentication routes
+  const authRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth']
+  const isAuthRoute = authRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))
+
+  if (pathname === "/workout/active" || pathname.startsWith("/workout/builder") || isAuthRoute) {
     return null;
   }
 

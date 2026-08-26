@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Hind_Siliguri } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import { AuthListener } from "@/components/AuthListener";
 import { Toaster } from "sonner";
 import { LanguageProvider } from "@/lib/i18n/LanguageContext";
 
@@ -53,6 +54,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-black text-foreground" suppressHydrationWarning>
         <LanguageProvider>
+          <AuthListener />
           <div className="flex-1 mx-auto w-full max-w-[430px] bg-background relative shadow-2xl flex flex-col min-h-screen">
             <main className="flex-1 pb-16">
               {children}
